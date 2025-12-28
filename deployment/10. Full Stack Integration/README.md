@@ -1147,6 +1147,859 @@ volumes:
 
 ---
 
+## How Components Connect After Deployment
+
+### Detailed Connection Architecture
+
+#### Complete Request Flow (Production)
+```
+User Browser
+    │
+    │ (1) User visits https://myapp.com
+    │
+    ▼
+┌─────────────────────┐
+│   DNS Provider      │  Resolves myapp.com → CloudFront IP
+│  (Route 53/GoDaddy) │
+└──────────┬──────────┘
+           │
+           │ (2) HTTPS request to CDN
+           │
+           ▼
+┌─────────────────────┐
+│   CDN/CloudFront    │  • Caches static files (JS, CSS, images)
+│  (Edge Locations)   │  • Serves from nearest location
+└──────────┬──────────┘  • Returns cached or fetches from origin
+           │
+           ├──────────────────────────┐
+           │                          │
+           │ (3a) Static files        │ (3b) API calls
+           │     (Cached)             │      (Proxied)
+           │                          │
+           ▼                          ▼
+┌─────────────────────┐    ┌─────────────────────┐
+│   S3 / Netlify     │    │  Load Balancer      │
+│   (React Build)     │    │  (ALB/ELB/Nginx)    │
+│                     │    └──────────┬──────────┘
+│  • index.html       │               │
+│  • main.js          │               │ (4) Routes to healthy backend
+│  • styles.css       │               │     instance (Round-robin/
+│  • images/          │               │     Least connections)
+└─────────────────────┘               │
+                                      ▼
+                           ┌─────────────────────┐
+                           │  Backend Instance 1 │ ◄─┐
+                           │    (NestJS)         │   │
+                           └──────────┬──────────┘   │
+                                      │               │ Auto-scaling
+                           ┌──────────▼──────────┐   │ (based on CPU,
+                           │  Backend Instance 2 │   │  memory, etc.)
+                           │    (NestJS)         │   │
+                           └──────────┬──────────┘   │
+                                      │               │
+                           ┌──────────▼──────────┐   │
+                           │  Backend Instance N │ ◄─┘
+                           │    (NestJS)         │
+                           └──────────┬──────────┘
+                                      │
+                         ┌────────────┴────────────┐
+                         │                         │
+                         │ (5) Check cache first   │ (6) Query if cache miss
+                         │                         │
+                         ▼                         ▼
+              ┌──────────────────┐    ┌──────────────────────┐
+              │   Redis Cache    │    │   PostgreSQL RDS     │
+              │                  │    │                      │
+              │ • Session data   │    │ • Users table        │
+              │ • API cache      │    │ • Posts table        │
+              │ • Rate limiting  │    │ • Relationships      │
+              └──────────────────┘    │ • Transactions       │
+                                      └──────────────────────┘
+```
+
+### Step-by-Step Connection Details
+
+#### Step 1: DNS Resolution
+```
+User enters: https://myapp.com
+                │
+                ▼
+Browser queries DNS:
+  What is the IP address of myapp.com?
+                │
+                ▼
+DNS responds:
+  myapp.com → 52.84.123.456 (CloudFront IP)
+  
+Time: ~10-50ms
+Cached: Yes (browser caches DNS for TTL period)
+```
+
+#### Step 2: SSL/TLS Handshake
+```
+Browser → CDN: Hello, I want HTTPS
+          CDN → Browser: Here's my SSL certificate
+                         (issued by Let's Encrypt/ACM)
+Browser: Certificate valid? ✓
+         Establishes encrypted connection
+         
+Time: ~50-100ms (first time)
+      ~0ms (if session resumed)
+```
+
+#### Step 3: Frontend Loading
+```
+Browser requests: https://myapp.com/
+                         │
+                         ▼
+            CloudFront checks cache:
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+    Cache Hit              Cache Miss
+        │                       │
+    Return cached          Fetch from S3
+    (0-5ms)                (20-50ms)
+        │                       │
+        └───────────┬───────────┘
+                    │
+            Returns index.html
+                    │
+                    ▼
+Browser parses HTML, requests assets:
+  • /static/js/main.abc123.js
+  • /static/css/main.xyz789.css
+  • /static/media/logo.png
+  
+(All served from CloudFront cache)
+
+Total load time: 200-500ms (first visit)
+                 50-100ms (return visit, cached)
+```
+
+#### Step 4: Frontend to Backend API Connection
+
+**4a. Initial API Request**
+```javascript
+// Frontend makes API call
+// src/services/api.ts
+
+const response = await axios.get('https://api.myapp.com/users');
+
+// Behind the scenes:
+```
+
+```
+Browser (React App)
+    │
+    │ HTTP GET https://api.myapp.com/users
+    │ Headers:
+    │   Authorization: Bearer eyJhbGc...
+    │   Content-Type: application/json
+    │   Origin: https://myapp.com
+    │
+    ▼
+DNS Resolution (api.myapp.com)
+    │
+    │ Resolves to Load Balancer IP
+    │
+    ▼
+┌─────────────────────────────┐
+│  Application Load Balancer  │
+│  (ALB on AWS)                │
+│                              │
+│  1. Checks health of backends│
+│  2. Routes based on:         │
+│     - Path rules             │
+│     - Headers                │
+│     - Round-robin            │
+└──────────────┬───────────────┘
+               │
+               │ Forwards to healthy instance
+               │
+               ▼
+┌─────────────────────────────┐
+│  Backend Instance (NestJS)  │
+│  Private IP: 10.0.1.50:4000 │
+│                              │
+│  1. Receives request         │
+│  2. Validates JWT token      │
+│  3. Checks authorization     │
+│  4. Processes request        │
+└──────────────┬───────────────┘
+               │
+               │ (See Step 5 & 6)
+```
+
+**4b. CORS Handling**
+```typescript
+// Backend: main.ts
+app.enableCors({
+  origin: [
+    'https://myapp.com',
+    'https://www.myapp.com'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+});
+
+// How it works:
+// 1. Browser sends OPTIONS preflight request
+// 2. Backend responds with allowed origins/methods
+// 3. If allowed, browser sends actual request
+// 4. Backend includes CORS headers in response
+```
+
+**4c. Authentication Flow**
+```
+Login Request:
+POST https://api.myapp.com/auth/login
+Body: { email, password }
+    │
+    ▼
+Backend validates credentials
+    │
+    ▼
+Generates JWT tokens:
+  - Access Token (15 min)
+  - Refresh Token (7 days)
+    │
+    ▼
+Response:
+{
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "eyJhbGc...",
+  "user": { id, email, name }
+}
+    │
+    ▼
+Frontend stores tokens:
+  - Access token: Memory/Redux
+  - Refresh token: httpOnly cookie
+    │
+    ▼
+Subsequent requests include:
+  Authorization: Bearer eyJhbGc...
+```
+
+#### Step 5: Backend to Cache (Redis) Connection
+
+**5a. Connection Setup**
+```typescript
+// Backend connects to Redis on startup
+// src/main.ts
+
+const redisClient = new Redis({
+  host: process.env.REDIS_HOST,     // myapp-redis.xxx.cache.amazonaws.com
+  port: parseInt(process.env.REDIS_PORT), // 6379
+  password: process.env.REDIS_PASSWORD,
+  retryStrategy: (times) => {
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 3,
+  enableReadyCheck: true
+});
+
+// Connection pool maintained
+// Multiple backend instances share same Redis
+```
+
+**5b. Cache Check Flow**
+```typescript
+// Example: Get user profile
+async getUserProfile(userId: string) {
+  // 1. Check Redis cache first
+  const cacheKey = `user:${userId}`;
+  const cached = await this.redis.get(cacheKey);
+  
+  if (cached) {
+    console.log('Cache hit!');
+    return JSON.parse(cached);
+  }
+  
+  // 2. Cache miss - query database
+  console.log('Cache miss - querying database');
+  const user = await this.userRepository.findOne(userId);
+  
+  // 3. Store in cache for future requests
+  await this.redis.set(
+    cacheKey,
+    JSON.stringify(user),
+    'EX',
+    3600 // Expire after 1 hour
+  );
+  
+  return user;
+}
+
+// Performance:
+// Cache hit:  ~1-5ms
+// Cache miss: ~50-200ms (includes DB query)
+```
+
+**5c. Session Management**
+```typescript
+// Store session in Redis
+await redis.set(
+  `session:${sessionId}`,
+  JSON.stringify({
+    userId: user.id,
+    loginTime: Date.now(),
+    ipAddress: req.ip
+  }),
+  'EX',
+  86400 // 24 hours
+);
+
+// Multiple backend instances can access same session
+// User can be authenticated on any instance
+```
+
+**5d. Rate Limiting with Redis**
+```typescript
+// Track API requests per user
+const key = `rate-limit:${userId}:${endpoint}`;
+const requests = await redis.incr(key);
+
+if (requests === 1) {
+  // First request - set expiry
+  await redis.expire(key, 60); // 60 seconds window
+}
+
+if (requests > 100) {
+  throw new TooManyRequestsException();
+}
+```
+
+#### Step 6: Backend to Database Connection
+
+**6a. Connection Pool**
+```typescript
+// Backend establishes connection pool on startup
+// TypeORM configuration
+
+{
+  type: 'postgres',
+  host: 'myapp-db.xxx.rds.amazonaws.com',
+  port: 5432,
+  username: 'app_user',
+  password: process.env.DB_PASSWORD,
+  database: 'myapp_production',
+  
+  // Connection pool settings
+  extra: {
+    max: 20,              // Maximum connections
+    min: 5,               // Minimum connections
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  },
+  
+  // SSL (required for RDS)
+  ssl: {
+    rejectUnauthorized: false
+  }
+}
+
+// How connection pool works:
+// 1. Backend starts → creates 5 connections
+// 2. Request comes → uses available connection
+// 3. Query executes → connection returned to pool
+// 4. High load → creates more connections (up to 20)
+// 5. Low load → closes idle connections (down to 5)
+```
+
+**6b. Query Execution Flow**
+```typescript
+// Example: Create a post
+async createPost(userId: string, data: CreatePostDto) {
+  // 1. Get connection from pool (~0-1ms)
+  
+  // 2. Begin transaction
+  return await this.dataSource.transaction(async (manager) => {
+    
+    // 3. Insert post
+    const post = await manager.save(Post, {
+      title: data.title,
+      content: data.content,
+      userId: userId,
+      createdAt: new Date()
+    });
+    // Query: INSERT INTO posts (title, content, user_id, created_at) 
+    //        VALUES ($1, $2, $3, $4) RETURNING *
+    // Time: ~5-20ms
+    
+    // 4. Update user's post count
+    await manager.increment(User, { id: userId }, 'postCount', 1);
+    // Query: UPDATE users SET post_count = post_count + 1 
+    //        WHERE id = $1
+    // Time: ~5-15ms
+    
+    // 5. Commit transaction
+    // Both queries succeed or both rollback
+    
+    return post;
+  });
+  // 6. Connection returned to pool
+}
+
+// Total time: ~15-50ms
+```
+
+**6c. Database Read Flow**
+```typescript
+// Example: Get posts with pagination
+async getPosts(page: number, limit: number) {
+  const [posts, total] = await this.postRepository.findAndCount({
+    where: { published: true },
+    relations: ['author', 'comments'],
+    order: { createdAt: 'DESC' },
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+  
+  // Generated SQL:
+  // SELECT posts.*, users.*, comments.*
+  // FROM posts
+  // LEFT JOIN users ON posts.user_id = users.id
+  // LEFT JOIN comments ON comments.post_id = posts.id
+  // WHERE posts.published = true
+  // ORDER BY posts.created_at DESC
+  // LIMIT 10 OFFSET 0
+  
+  // Execution:
+  // 1. Database receives query
+  // 2. Query planner optimizes
+  // 3. Uses indexes for WHERE and ORDER BY
+  // 4. Performs JOIN operations
+  // 5. Returns result set
+  
+  // Time: 10-100ms (depends on data size and indexes)
+  
+  return {
+    posts,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit)
+  };
+}
+```
+
+**6d. Connection Resilience**
+```typescript
+// Handle connection failures
+@Module({
+  imports: [
+    TypeOrmModule.forRootAsync({
+      useFactory: () => ({
+        // ... config
+        
+        // Retry logic
+        retryAttempts: 3,
+        retryDelay: 3000,
+        
+        // Connection events
+        logging: ['error', 'warn'],
+        
+        // Pool error handling
+        poolErrorHandler: (err) => {
+          logger.error('Database pool error', err);
+          // Alert monitoring system
+          alerting.send('Database pool error', err);
+        }
+      })
+    })
+  ]
+})
+
+// Automatic reconnection:
+// 1. Connection lost
+// 2. TypeORM detects failure
+// 3. Waits 3 seconds
+// 4. Attempts reconnection
+// 5. Retries up to 3 times
+// 6. If all fail, application alerts and may restart
+```
+
+### Network Security in Production
+
+#### VPC Configuration (AWS Example)
+```
+┌─────────────────────────────────────────────────────┐
+│                    VPC (10.0.0.0/16)                │
+│                                                     │
+│  ┌────────────────────────────────────────────┐   │
+│  │         Public Subnet (10.0.1.0/24)        │   │
+│  │                                             │   │
+│  │  ┌──────────────┐      ┌──────────────┐   │   │
+│  │  │     NAT      │      │     ALB      │   │   │
+│  │  │   Gateway    │      │ (Port 443)   │   │   │
+│  │  └──────────────┘      └──────┬───────┘   │   │
+│  │         │                      │           │   │
+│  └─────────┼──────────────────────┼───────────┘   │
+│            │                      │               │
+│  ┌─────────▼──────────────────────▼───────────┐   │
+│  │      Private Subnet (10.0.2.0/24)          │   │
+│  │                                             │   │
+│  │  ┌──────────────┐      ┌──────────────┐   │   │
+│  │  │   Backend    │      │   Backend    │   │   │
+│  │  │ Instance 1   │      │ Instance 2   │   │   │
+│  │  │  10.0.2.10   │      │  10.0.2.11   │   │   │
+│  │  └──────┬───────┘      └──────┬───────┘   │   │
+│  │         │                     │            │   │
+│  └─────────┼─────────────────────┼────────────┘   │
+│            │                     │                │
+│  ┌─────────▼─────────────────────▼────────────┐   │
+│  │      Private Subnet (10.0.3.0/24)          │   │
+│  │         (Database Subnet)                   │   │
+│  │                                             │   │
+│  │  ┌──────────────┐      ┌──────────────┐   │   │
+│  │  │ PostgreSQL   │      │    Redis     │   │   │
+│  │  │    RDS       │      │  ElastiCache │   │   │
+│  │  │  10.0.3.10   │      │  10.0.3.20   │   │   │
+│  │  └──────────────┘      └──────────────┘   │   │
+│  │                                             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+
+Security Rules:
+1. Public Subnet:
+   - Inbound: 443 from 0.0.0.0/0 (internet)
+   - Outbound: All
+
+2. Backend Instances (Private):
+   - Inbound: 4000 from ALB only
+   - Outbound: All (through NAT for updates)
+
+3. Database (Private):
+   - Inbound: 5432 from Backend instances only
+   - No outbound internet access
+
+4. Redis (Private):
+   - Inbound: 6379 from Backend instances only
+   - No outbound internet access
+```
+
+### Load Balancing and Health Checks
+
+#### How Load Balancer Routes Traffic
+```
+Request comes in:
+    │
+    ▼
+┌─────────────────────────────┐
+│  Application Load Balancer  │
+│                              │
+│  Active Backends:            │
+│  ✓ Instance 1 (Healthy)     │ ◄─┐
+│  ✓ Instance 2 (Healthy)     │   │ Health checks
+│  ✗ Instance 3 (Unhealthy)   │   │ every 30s
+│                              │   │
+│  Routing Algorithm:          │   │
+│  • Round-robin (default)     │   │
+│  • Least connections         │ ──┘
+│  • Sticky sessions (option)  │
+└──────────────┬───────────────┘
+               │
+      ┌────────┼────────┐
+      │        │        │
+   Request  Request  Request
+      1        2        3
+      │        │        │
+      ▼        ▼        ▼
+   Instance Instance Skip
+      1        2     Instance 3
+                     (unhealthy)
+```
+
+#### Health Check Implementation
+```typescript
+// Backend: health.controller.ts
+@Controller('health')
+export class HealthController {
+  constructor(
+    @InjectConnection() private connection: Connection,
+    @Inject('REDIS_CLIENT') private redis: Redis
+  ) {}
+
+  @Get()
+  async check() {
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      checks: {}
+    };
+
+    // Check database
+    try {
+      await this.connection.query('SELECT 1');
+      health.checks['database'] = 'healthy';
+    } catch (error) {
+      health.checks['database'] = 'unhealthy';
+      health.status = 'unhealthy';
+    }
+
+    // Check Redis
+    try {
+      await this.redis.ping();
+      health.checks['redis'] = 'healthy';
+    } catch (error) {
+      health.checks['redis'] = 'unhealthy';
+      health.status = 'unhealthy';
+    }
+
+    // Check memory
+    const memUsage = process.memoryUsage();
+    health.checks['memory'] = {
+      rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+      heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+    };
+
+    const statusCode = health.status === 'healthy' ? 200 : 503;
+    return { statusCode, ...health };
+  }
+}
+
+// Load Balancer configuration:
+// Health Check Path: /health
+// Interval: 30 seconds
+// Timeout: 5 seconds
+// Healthy threshold: 2 consecutive successes
+// Unhealthy threshold: 2 consecutive failures
+```
+
+### Complete Request-Response Cycle
+
+#### Example: User Creates a Post
+```
+1. Frontend (React)
+   ─────────────────────────────────────────────────
+   const createPost = async (title, content) => {
+     const response = await api.post('/posts', {
+       title,
+       content
+     });
+     return response.data;
+   };
+   
+   Time: 0ms - Request initiated
+
+2. DNS & SSL
+   ─────────────────────────────────────────────────
+   • DNS lookup (cached): 0ms
+   • SSL handshake (reused): 0ms
+   • Connection established: 0ms
+   
+   Time: 0ms - Connection ready
+
+3. Load Balancer
+   ─────────────────────────────────────────────────
+   • Receives request at ALB
+   • Checks backend health
+   • Routes to Instance 2 (least connections)
+   
+   Time: 1-2ms - Routing decision
+
+4. Backend - Authentication
+   ─────────────────────────────────────────────────
+   // auth.guard.ts
+   • Extracts JWT from header
+   • Verifies token signature
+   • Checks expiration
+   • Loads user from token
+   
+   Time: 5-10ms - Auth validation
+
+5. Backend - Cache Check
+   ─────────────────────────────────────────────────
+   • Check Redis for user permissions
+   • Cache hit: User has write permission
+   
+   Time: 1-3ms - Redis query
+
+6. Backend - Validation
+   ─────────────────────────────────────────────────
+   // ValidationPipe
+   • Validates DTO
+   • Checks title length
+   • Sanitizes content
+   
+   Time: 1-2ms - Input validation
+
+7. Backend - Database Query
+   ─────────────────────────────────────────────────
+   // posts.service.ts
+   • Get connection from pool: 0-1ms
+   • Begin transaction
+   • INSERT post: 10-20ms
+   • UPDATE user stats: 5-10ms
+   • Commit transaction
+   • Return connection to pool
+   
+   Time: 20-40ms - Database operations
+
+8. Backend - Cache Update
+   ─────────────────────────────────────────────────
+   // Invalidate related caches
+   await redis.del(`user:${userId}:posts`);
+   await redis.del(`posts:recent`);
+   
+   Time: 2-4ms - Cache invalidation
+
+9. Backend - Response
+   ─────────────────────────────────────────────────
+   return {
+     statusCode: 201,
+     message: 'Post created',
+     data: post
+   };
+   
+   Time: 1ms - JSON serialization
+
+10. Load Balancer → Frontend
+    ─────────────────────────────────────────────────
+    • Response through ALB
+    • Compressed (gzip)
+    • SSL encrypted
+    
+    Time: 1-2ms - Network transfer
+
+11. Frontend Receives Response
+    ─────────────────────────────────────────────────
+    • Parse JSON
+    • Update Redux store
+    • Re-render component
+    • Show success message
+    
+    Time: 5-10ms - UI update
+
+═════════════════════════════════════════════════════
+Total Time: 35-75ms (end-to-end)
+
+Breakdown:
+• Network: ~5ms
+• Authentication: ~10ms
+• Database: ~30ms
+• Cache: ~5ms
+• Processing: ~5ms
+```
+
+### Monitoring the Connections
+
+#### Application Performance Monitoring
+```typescript
+// Track all connection metrics
+import * as newrelic from 'newrelic';
+
+// Database query monitoring
+const startTime = Date.now();
+const result = await this.postRepository.find();
+const duration = Date.now() - startTime;
+
+newrelic.recordMetric('Custom/Database/QueryTime', duration);
+
+if (duration > 100) {
+  logger.warn('Slow database query', {
+    query: 'posts.find',
+    duration,
+    threshold: 100
+  });
+}
+
+// Redis monitoring
+const cacheStart = Date.now();
+const cached = await redis.get(key);
+const cacheDuration = Date.now() - cacheStart;
+
+newrelic.recordMetric('Custom/Redis/ResponseTime', cacheDuration);
+
+// API endpoint monitoring
+@Controller('posts')
+export class PostsController {
+  @Get()
+  @UseInterceptors(PerformanceInterceptor)
+  async getPosts() {
+    // Interceptor tracks timing automatically
+  }
+}
+```
+
+#### Connection Pool Monitoring
+```typescript
+// Monitor database connection pool
+setInterval(() => {
+  const pool = dataSource.driver.master;
+  
+  const metrics = {
+    totalConnections: pool.totalCount,
+    activeConnections: pool.activeCount,
+    idleConnections: pool.idleCount,
+    waitingClients: pool.waitingCount
+  };
+  
+  logger.info('Connection pool stats', metrics);
+  
+  // Alert if pool exhausted
+  if (metrics.waitingClients > 5) {
+    alerting.send('Database connection pool exhausted', metrics);
+  }
+}, 60000); // Every minute
+```
+
+### Scaling Considerations
+
+#### Horizontal Scaling
+```
+Single Instance:
+┌──────────────┐
+│   Backend    │  ← All traffic
+│  (1 instance)│     Max: 1000 req/s
+└──────────────┘
+
+Auto-Scaling:
+                    ┌──────────────┐
+                    │   Backend 1  │  ← 25% traffic
+                    └──────────────┘
+                    ┌──────────────┐
+┌─────────┐         │   Backend 2  │  ← 25% traffic
+│   ALB   │ ───────►└──────────────┘
+└─────────┘         ┌──────────────┐
+                    │   Backend 3  │  ← 25% traffic
+                    └──────────────┘
+                    ┌──────────────┐
+                    │   Backend 4  │  ← 25% traffic
+                    └──────────────┘
+                    
+Total capacity: 4000 req/s
+Redundancy: Yes (if one fails, others handle load)
+```
+
+#### Database Connection Scaling
+```typescript
+// Each backend instance has its own connection pool
+
+Instance 1:  [DB Pool: 20 connections] ─┐
+Instance 2:  [DB Pool: 20 connections] ─┤
+Instance 3:  [DB Pool: 20 connections] ─┼─► PostgreSQL
+Instance 4:  [DB Pool: 20 connections] ─┘   (Max: 100 connections)
+
+// Configuration:
+{
+  extra: {
+    max: 20,  // Per instance
+  }
+}
+
+// Database can handle:
+// - 4 instances × 20 connections = 80 connections
+// - Leaves 20 for admin/maintenance
+// - If scaling to 5 instances, reduce to max: 15
+```
+
+---
+
 ## Production Deployment Scenarios
 
 ### Scenario 1: Budget-Friendly (< $50/month)

@@ -1,8 +1,12 @@
 # Top NestJS Interview Questions
 
 ## Core Concepts & Architecture
+
 1. What is NestJS and why is it built on top of Express/Fastify?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS is a progressive Node.js framework for building efficient, reliable, and scalable server-side applications. It solves a major problem in the Node.js ecosystem: **Architecture**. While Node.js is powerful, it doesn't provide a structure, often leading to "Spaghetti Code" in large projects.
 
 NestJS provides an out-of-the-box architecture inspired by Angular (Modules, Providers, Controllers) which enforces separation of concerns and maintainability.
@@ -12,8 +16,13 @@ It is built on top of HTTP Server frameworks like **Express** (default) or **Fas
 - **Fastify:** High performance, low overhead (Optional).
 This abstraction allows developers to switch underlying platforms without rewriting their business logic.
 
+</details>
+
 2. Explain the main architectural pattern NestJS follows.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS heavily relies on the **Modular Automation** system and the **Dependency Injection (DI)** pattern.
 
 - **Modules:** The application is a graph of modules. The root module is the starting point. Modules group related components (Controllers + Services) together.
@@ -21,8 +30,13 @@ NestJS heavily relies on the **Modular Automation** system and the **Dependency 
 - **Services (Providers):** Contain business logic and are injected into controllers.
 - **Dependency Injection:** NestJS manages the lifecycle of classes. instead of manually creating instances (`new UserService()`), you ask Nest to provide it via the constructor. This makes testing and swapping implementations (e.g., MockService vs RealService) incredibly easy.
 
+</details>
+
 3. What is the difference between specific platform (e.g., `NestExpressApplication`) and platform-agnostic frameworks?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS is platform-agnostic by default. This means your controllers don't strictly return Express-specific objects.
 
 - **Platform-Agnostic (Default):**
@@ -37,21 +51,37 @@ NestJS is platform-agnostic by default. This means your controllers don't strict
   ```
   You gain access to Express-only methods. The downside is that your code is now tightly coupled to Express.
 
+</details>
+
 4. How does NestJS leverage TypeScript?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Unlike many Node.js frameworks that tacked on TypeScript later, NestJS is built with **TypeScript first**.
 - **Decorators:** It uses decorators heavily (`@Controller`, `@Get`, `@Injectable`) to provide declarative metadata. This drastically reduces boilerplate code.
 - **Type Safety:** It ensures your dependency injection tokens, DTOs, and return types are checked at compile time, preventing a whole class of runtime errors.
 - **Reflection:** It uses TypeScript's `emitDecoratorMetadata` to automatically resolve dependencies. For example, `constructor(private service: UserService)` tells Nest that this class needs `UserService` without you having to manually register a token in many cases.
 
+</details>
+
 5. What is the root module and why is it required?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 The **Root Module** (`AppModule` usually) is the entry point of the application graph. NestJS uses this module to build its internal "Dependency Graph".
 - When the application starts (`NestFactory.create(AppModule)`), Nest looks at the `imports` of the root module.
 - It traverses down the tree (Root -> UsersModule -> AuthModule...) to resolve all dependencies and instantiate providers in the correct order.
 - Without a root module, Nest wouldn't know where to begin scanning for controllers and providers, effectively meaning the application has no structure.
+
+</details>
+
 6. Explain the concept of Dependency Injection in NestJS.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Dependency Injection (DI) is an **Inversion of Control (IoC)** technique where you delegate the responsibility of instantiating dependencies to the framework (the IoC Container) instead of creating them manually.
 
 In NestJS:
@@ -61,8 +91,13 @@ In NestJS:
 4.  **Resolve:** At runtime, NestJS detects this dependency, checks its internal container for an existing instance (Singleton by default), creates one if needed, and passes it to the constructor.
 *Benefit:* This decouples your code. Your Controller doesn't know *how* to create the Service, it just knows it *needs* one. This is crucial for unit testing (swapping real services for mocks).
 
+</details>
+
 7. How does the NestJS Command Line Interface (CLI) help in development?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 The CLI is a powerful productivity tool that automates project lifecycle tasks. Key features include:
 
 -   **Scaffolding (`nest new`):** Generates a best-practice project structure.
@@ -73,8 +108,13 @@ The CLI is a powerful productivity tool that automates project lifecycle tasks. 
 -   **Execution (`nest start`):** Runs the application, supports "Watch Mode" (`--watch`) for hot-reload during development.
 -   **Building (`nest build`):** Compiles the project to JavaScript (`dist` folder) for production deployment.
 
+</details>
+
 8. What is the difference between a standalone application and a standard NestJS application?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **Standard Application:**
     -   Created via `NestFactory.create(AppModule)`.
     -   Starts a **Network Listener** (HTTP Server like Express or Fastify).
@@ -87,8 +127,13 @@ The CLI is a powerful productivity tool that automates project lifecycle tasks. 
     -   Used for: **CRON Jobs**, **CLI Scripts**, **Worker Processes**, or one-off tasks (e.g., a database migration script).
     -   It typically runs a specific task and then exits.
 
+</details>
+
 9. How does NestJS handle environment variables?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS provides a dedicated module `@nestjs/config` (typically wrapping the popular `dotenv` library) to handle configuration securely.
 
 **Best Practice Workflow:**
@@ -105,8 +150,13 @@ NestJS provides a dedicated module `@nestjs/config` (typically wrapping the popu
     ```
 This abstracts the source of the configuration (env file vs system env vars) and provides type safety.
 
+</details>
+
 10. What are decorators in NestJS and name a few common ones?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Decorators are a TypeScript language feature that allows you to attach **metadata** to classes, methods, or properties. NestJS uses this metadata to organize the application and route requests.
 
 Without decorators, you would have to manually configure routes and wiring in a central file (like in old Express apps). Decorators make this declarative.
@@ -116,25 +166,43 @@ Without decorators, you would have to manually configure routes and wiring in a 
 -   **Method Level:** `@Get()`, `@Post()`, `@UseGuards()`, `@UseInterceptors()`.
 -   **Param Level:** `@Body()`, `@Param()`, `@Query()`, `@Req()`, `@Headers()`.
 
+</details>
+
 ## Modules
+
 11. What is the purpose of a Module (`@Module`) in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 A Module is a class annotated with the `@Module()` decorator. It serves several critical purposes:
 -   **Organization:** It groups related controllers, services, and other providers into cohesive blocks (e.g., `UsersModule`, `AuthModule`).
 -   **Compilation Context:** It tells NestJS how to compile dependencies. Nest uses modules to build the application graph.
 -   **Encapsulation:** By default, providers defined in a module are **private**. They are not visible to other modules unless explicitly exported. This enforces a strict public API for every feature.
 
+</details>
+
 12. What are the four main properties of the `@Module` decorator?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 The `@Module()` decorator accepts a single object with these properties:
 1.  **`providers`:** The services, repositories, factories, helpers, etc., that will be instantiated by the Nest injector and is shared at least across this module.
 2.  **`controllers`:** The set of controllers defined in this module which have to be instantiated.
 3.  **`imports`:** The list of *other* modules that export the providers which are required in this module.
 4.  **`exports`:** The subset of `providers` that are provided by this module and should be available in other modules which import this module.
 
+</details>
+
 13. How do you share a service between two different modules?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 To make `ServiceA` (from `ModuleA`) available in `ModuleB`, you must follow two steps:
+
+</details>
 
 1.  **Export from Source:** In `ModuleA`, add `ServiceA` to the `exports` array.
     ```typescript
@@ -153,15 +221,25 @@ To make `ServiceA` (from `ModuleA`) available in `ModuleB`, you must follow two 
     ```
 Now you can inject `ServiceA` into any controller or provider within `ModuleB`.
 
+</details>
+
 14. What are Global Modules (`@Global`)? When should you use them?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 A Global Module is a module decorated with `@Global()`.
 -   **Behavior:** You only need to import it **once** (usually in the root `AppModule`). Its exported providers are then available **everywhere** in the application without needing to import the module in other feature modules.
 -   **Use Case:** Cross-cutting concerns like Database connections (`TypeOrmModule`), Configuration (`ConfigModule`), or generic Helpers that are used in almost every file.
 -   **Warning:** Making everything global is considered a bad practice ("Global State" anti-pattern). It makes dependencies opaque and harder to track. Prefer explicit imports for most feature modules.
 
+</details>
+
 15. What are Dynamic Modules? How are they different from Static Modules?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **Static Modules:** Their configuration is fixed at compile time. You just `@Module({})` and that's it.
 -   **Dynamic Modules:** These are modules that can create providers **dynamically** based on runtime configuration. They are just functions that *return* a module definition.
     
@@ -169,7 +247,10 @@ A Global Module is a module decorated with `@Global()`.
     
     They typically implement a static method conventionally named `forRoot`, `register`, or `traverse` that returns a `DynamicModule` object.
 16. Explain the `forRoot`, `register`, and `forFeature` patterns in Dynamic Modules.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 These are naming conventions (not hard rules) for configuring Dynamic Modules:
 -   **`forRoot`**: Used when configuring a module **once** for the entire application (Singleton). Usually defines the database connection, global configuration, etc.
     *   *Example:* `MongooseModule.forRoot('mongodb://localhost/test')`
@@ -178,8 +259,13 @@ These are naming conventions (not hard rules) for configuring Dynamic Modules:
 -   **`forFeature`**: Used to import strictly the "features" (Entities, Repositories) relevant to the current module scope, using the connection established by `forRoot`.
     *   *Example:* `TypeOrmModule.forFeature([UserEntity])` creates a `UserRepository` just for the module importing it.
 
+</details>
+
 17. How do you resolve Circular Dependencies between modules?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Circular dependency occurs when Module A needs Module B, and Module B needs Module A. NestJS cannot resolve the graph order.
 **Solution:** Use `forwardRef`.
 1.  **In Module Imports:**
@@ -198,25 +284,41 @@ Circular dependency occurs when Module A needs Module B, and Module B needs Modu
     ) {}
     ```
 
+</details>
+
 18. Can a module import itself?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 **No.** A module importing itself would create an immediate infinite recursion (stack overflow) during the dependency resolution phase. The application will crash on startup.
 
+</details>
+
 19. What is the difference between `exports` in a module and `public` in a class?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **`exports` (NestJS):** Controls **Dependency Injection Visibility**. If a provider is not in `exports`, another module *cannot* inject it, even if it imports the module. It effectively makes the provider "private" to the module's scope.
 -   **`public` (TypeScript):** Controls **Class Member Access**. A `public` method can be called by any other class in code. However, even if a service class is `public`, if it is not exported by its Module, NestJS will throw an error when another module tries to ask the DI container for it.
 
 ## Controllers & Routing
 20. What is the role of a Controller?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 The Controller's single responsibility is **handling incoming requests and returning responses** to the client.
 -   It acts as the **entry point** for the application.
 -   It inspects the request (URL, Query, Body, Headers).
 -   It delegates the actual "work" (Business Logic) to a **Service**.
 -   **Production Rule:** A Controller should be "Thin". It should never contain complex logic, database queries, or calculations. It should simply orchestrate the input/output.
 21. How do you define a route in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You define a route by decorating a controller method with an HTTP verb decorator (`@Get`, `@Post`, `@Put`, `@Delete`, etc.). The path is a concatenation of the Controller's prefix and the Method's path.
 
 ```typescript
@@ -227,8 +329,13 @@ export class UsersController {
 }
 ```
 
+</details>
+
 22. Explain the usage of `@Body()`, `@Param()`, and `@Query()` decorators.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 These decorators extract data from the incoming request object:
 -   **`@Body()`**: Extracts the entire **JSON body** (usually for POST/PUT).
     -   `create(@Body() dto: CreateUserDto)`
@@ -237,8 +344,13 @@ These decorators extract data from the incoming request object:
 -   **`@Query('search')`**: Extracts **query string parameters** (after the `?` in URL).
     -   URL: `/users?search=john` -> `findAll(@Query('search') search: string)`
 
+</details>
+
 23. How do you handle HTTP status codes in a controller?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 By default, NestJS returns **200 OK** (mostly) or **201 Created** (for POST).
 To customize this:
 1.  **Static:** Use the `@HttpCode()` decorator.
@@ -249,8 +361,13 @@ To customize this:
     ```
 2.  **Dynamic/Error:** Throw an exception (e.g., `throw new NotFoundException()`) which Nest automatically translates to a 404 response.
 
+</details>
+
 24. How can you access the underlying request object (Express/Fastify) directly?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You can inject the library-specific request object using the `@Req()` decorator (or `@Request()`).
 ```typescript
 @Get()
@@ -260,8 +377,13 @@ findAll(@Req() request: Request) {
 ```
 **Warning:** Doing this makes your controller **platform-specific** (harder to switch from Express to Fastify later) and harder to test. Avoid this if possible; use standard decorators (`@Body`, `@Headers`, `@Ip`) instead.
 
+</details>
+
 25. How do you implement a wildcard route?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS supports pattern based routing. The `*` character is used as a wildcard.
 ```typescript
 @Get('ab*cd')
@@ -271,15 +393,23 @@ findAll() {
 ```
 *Note:* The order of methods matters! Define specific routes *before* wildcard routes, otherwise the wildcard might intercept requests intended for other paths.
 26. What is the difference between `@Res()` and returning a value directly from a controller method?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **Standard (Returning value):** Recommended. You return an object/string/array, and NestJS automatically serializes it to JSON and sends it with a 200 OK. It effectively handles the response lifecycle for you.
 -   **Library-Specific (`@Res()`):** You inject the response object (e.g., Express `res`).
     -   **Manual Mode:** Nest puts you in "Manual Mode". You act as if you are writing raw Express code.
     -   **Responsibility:** You **MUST** send the response yourself (`res.json(...)`, `res.send(...)`). If you forget, your server hangs indefinitely.
     -   *Use Case:* Streaming files, manipulating cookies manually, or special headers that Nest decorators don't cover.
 
+</details>
+
 27. How does NestJS handle content-type negotiation?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Out of the box, NestJS defaults to `application/json`.
 -   If you return a JS Object/Array -> sent as JSON.
 -   If you return a String -> sent as `text/html`.
@@ -290,8 +420,15 @@ Out of the box, NestJS defaults to `application/json`.
     getXml() { ... }
     ```
 
+</details>
+
 28. How do you perform a redirect from a controller?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  **Static Redirect:** Use the `@Redirect()` decorator.
     ```typescript
     @Get()
@@ -308,8 +445,15 @@ Out of the box, NestJS defaults to `application/json`.
     }
     ```
 
+</details>
+
 29. Explain how to manage headers in a response.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  **Static Headers:** Use `@Header('Cache-Control', 'none')`.
 2.  **Dynamic Headers:** You must switch to Library-Specific mode by injecting `@Res({ passthrough: true })`.
     -   **`passthrough: true`**: This is a key trick. It gives you the `res` object to set headers/cookies, *but* lets NestJS still handle the final JSON serialization and sending.
@@ -323,25 +467,43 @@ Out of the box, NestJS defaults to `application/json`.
 
 ## Providers & Services
 30. What is a Provider in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 A provider is **any class that can be injected** as a dependency.
 In NestJS, almost everything is a provider: Services, Repositories, Factories, Helpers.
 -   Technically, it is a class decorated with `@Injectable()`.
 -   Providers are registered in the `providers` array of a Module.
 -   They are managed by the NestJS IoC (Inversion of Control) container.
 31. What is the default scope of a provider in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 **Singleton.**
 By default, Nest.js creates only **one instance** of each provider and shares it across the entire application. This means the constructor of the service is called only once during bootstrap.
 
+</details>
+
 32. Explain the different scopes available (Singleton, Request, Transient).
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  **DEFAULT (Singleton):** One instance serves the whole app. Best for performance. State is shared (careful!).
 2.  **REQUEST:** A new instance is created for **every incoming HTTP request**. Use this if you need to store request-specific data (e.g., Request ID, Authenticated User) inside the service class itself. *Warning:* High memory usage, slower garbage collection.
 3.  **TRANSIENT:** A new instance is created **every time it is injected**. If ServiceA injects Helper, and ServiceB injects Helper, they get two different Helper instances.
 
+</details>
+
 33. How do you create a custom provider?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You register it in the `@Module` using the verbose syntax:
 ```typescript
 providers: [
@@ -353,23 +515,36 @@ providers: [
 ```
 You then inject it using `@Inject('CONNECTION')`.
 
+</details>
+
 34. What is the difference between `useValue`, `useClass`, and `useFactory`?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **`useValue`**: Injecs a constant value (string, number, object instance). Useful for mock objects in testing or config constants.
 -   **`useClass`**: Allows you to swap the implementation class.
     *   *Example:* `provide: LoggerService, useClass: ProductionLoggerService`. (Use `MockLogger` in tests).
 -   **`useFactory`**: Most powerful. Creates a provider dynamically. Can accept arguments (other providers) and run logic before returning the instance.
     *   *Example:* Reading a DB password from ConfigService before connecting.
 
+</details>
+
 35. What is `Optional()` injection?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Sometimes, a dependency might not be available (e.g., a logging service that is only configured in Production).
 Using `@Optional()` prevents Nest from crashing if the provider is missing. It just injects `undefined` instead.
 ```typescript
 constructor(@Optional() private logger: LoggerService) {}
 ```
 36. How does property-based injection work?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Standard injection uses the **constructor**. Property-based injection allows you to inject directly into a class property using the `@Inject()` decorator.
 ```typescript
 @Injectable()
@@ -380,14 +555,22 @@ export class HttpService {
 ```
 **Use Case:** It is strictly recommended to use **Constructor Injection** for everything. Property injection is generally used only when extending a parent class (`super()`) to avoid manually passing dozens of dependencies from the Child to the Parent constructor.
 
+</details>
+
 37. Can you inject a provider into a standard class that is not decorated?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 **No.** The class must belong to the Dependency Graph (Managed by Nest IoC). Standard JS/TS classes (`new MyClass()`) are invisible to Nest.
 *Exception:* You can pass a provider instance *into* a standard class manually, but the standard class itself cannot "ask" Nest for dependencies.
 
 ## Request Lifecycle (Middleware, Guards, Interceptors, Pipes, Filters)
 38. Explain the execution order of Middleware, Guards, Interceptors, Pipes, and Exception Filters.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 This is the most critical interview question. The order is:
 1.  **Middleware** (Express/Fastify level: Logging, Cors, Helmet)
 2.  **Guards** (Authorization: Can this user proceed?)
@@ -397,15 +580,25 @@ This is the most critical interview question. The order is:
 6.  **Interceptors (Post-Controller)** (Transforming the response, Mapping data)
 7.  **Exception Filters** (Catching errors if any occurred in steps 2-6)
 
+</details>
+
 39. What is Middleware in NestJS and how is it different from Express middleware?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **Nest Middleware** is essentially the same as **Express Middleware**. It is a function that has access to `req`, `res`, and `next()`.
 -   It runs **before** any NestJS context (Guards/Interceptors).
 -   It is configured in the module's `configure()` method using `Unrestricted` syntax (Nest doesn't strictly control it via decorators).
 -   *Difference:* Nest middleware can support Dependency Injection (you can inject services into a middleware class), whereas raw Express middleware cannot easily do this.
 
+</details>
+
 40. How do you implement a functional middleware?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Middleware doesn't have to be a class. It can be a simple function (lighter, less boilerplate).
 ```typescript
 export function logger(req, res, next) {
@@ -417,14 +610,22 @@ export function logger(req, res, next) {
 consumer.apply(logger).forRoutes('cats');
 ```
 41. What is the primary purpose of a Guard?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 **Authorization.**
 Guards have a single responsibility: To determine if the request should proceed or be stopped.
 They implement the `CanActivate` interface and must return `true` (allow) or `false` (deny, throws 403 Forbidden).
 *Why not Middleware?* Guards have access to the `ExecutionContext` (they know which controller method will be called next), whereas Middleware is dumb and only knows URL/Method.
 
+</details>
+
 42. How does an `AuthGuard` work?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 An `AuthGuard` (usually from `@nestjs/passport`) connects the strategy pattern to the Guard.
 1.  It extracts the token (JWT) from the header.
 2.  It validates the token (signature, expiration).
@@ -432,16 +633,26 @@ An `AuthGuard` (usually from `@nestjs/passport`) connects the strategy pattern t
 4.  It returns `true`.
 5.  If invalid, it throws `UnauthorizedException` (401).
 
+</details>
+
 43. What is an Interceptor? Give a common use case.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Interceptors, inspired by Aspect Oriented Programming (AOP), wrap the execution stream. They can run extra logic **before** the method runs and **after** the method returns.
 **Common Use Case: Response Mapping.**
 -   Your DB returns `{ _id: 1, first: 'John', pass: 'hash' }`.
 -   You want to send `{ id: 1, name: 'John' }` to the client.
 -   An interceptor intercepts the `return` value and transforms it (using `class-transformer` `Exclude` logic) before the network response is sent.
 
+</details>
+
 44. How do you transform a response using an Interceptor?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You use RxJS operators since Interceptors deal with streams (`Observable`).
 ```typescript
 intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -453,21 +664,34 @@ intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
 }
 ```
 
+</details>
+
 45. What is a Pipe?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 To **Validate** or **Transform** incoming input arguments (Body, Query, Params) before they reach the controller method.
 -   **Transformation:** Convert string `'123'` to number `123`.
 -   **Validation:** Check if email is valid. If invalid, **Throw Error immediately**. The controller method is **never executed**.
 *Why is this good?* It guarantees that inside your controller method, the `id` is definitely a Number and the `dto.email` is definitely valid, removing cluttering `if (isNaN(id))` checks from business logic.
 46. What is the difference between a transformation pipe and a validation pipe?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **Transformation Pipe:** Modifies the input. It returns a *new* value which replaces the original argument.
     -   Example: `ParseIntPipe`: Takes string `'1'` -> Returns number `1`.
 -   **Validation Pipe:** Checks the input without modifying it. It returns the *same* value. If the check fails, it throws an exception.
     -   Example: Checks if the object has a valid `email` property.
 
+</details>
+
 47. How do you enable global validation pipes?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You set it up in `main.ts` during bootstrap:
 ```typescript
 async function bootstrap() {
@@ -481,15 +705,27 @@ async function bootstrap() {
 ```
 This ensures *every* endpoint in the app is protected against bad data automatically.
 
+</details>
+
 48. What is an Exception Filter?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 The **last line of defense**.
 When an exception isn't handled by your code (e.g., you `throw new Error('oops')`), it bubbles up to the Exception Layer.
 -   Out of the box, Nest has a **Global Exception Filter** that catches everything and returns a friendly JSON `{ statusCode: 500, message: 'Internal Server Error' }`.
 -   You typically write Custom Filters to catch specific errors (e.g., `TypeORMError` -> 409 Conflict) or to standardize error response formats.
 
+</details>
+
 49. How do you create a global exception filter to handle all HttpExceptions?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  Create a class implementing `ExceptionFilter`.
 2.  Decorate with `@Catch(HttpException)`.
 3.  Register it globally in `main.ts` (`app.useGlobalFilters(new HttpErrorFilter())`) OR in `AppModule`.
@@ -510,8 +746,13 @@ export class HttpErrorFilter implements ExceptionFilter {
 }
 ```
 
+</details>
+
 50. Can Guards modify the request object?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 **Yes.** This is a very common pattern (e.g., Authorization).
 As seen in `AuthGuard`, we validate the token and then often attach the user payload: `req.user = user`.
 This is why subsequent Guards or Controllers can access `req.user`.
@@ -519,22 +760,35 @@ This is why subsequent Guards or Controllers can access `req.user`.
 
 ## Data, Databases & DTOs
 51. What is a DTO (Data Transfer Object) and why should you use it?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 A DTO is an object that defines how data will be sent over the network.
 -   **Why use it?** It decouples your **Database Entity** from your **API Interface**. You typically don't want to expose your entire database schema (like passwords, internal flags) to the public API.
 -   **Class vs Interface:** In NestJS, we use **Classes** (not Interfaces) for DTOs.
     -   *Reason:* Interfaces are removed during TypeScript compilation (runtime erasure). Classes preserve metadata, which libraries like `class-validator` and Swagger need at runtime.
 
+</details>
+
 52. How does `class-validator` and `class-transformer` work with NestJS pipes?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 They work hand-in-hand with the built-in `ValidationPipe`:
 1.  **Request comes in:** Payload is just a plain JavaScript Object (JSON).
 2.  **Transformation (`class-transformer`):** The Pipe uses the DTO class (from the method signature) and transforms the plain JSON into an actual **Instance** of that DTO class.
 3.  **Validation (`class-validator`):** Now that it is a class instance, the decorators (`@IsString()`, `@IsEmail()`) are active. The validator runs against this instance.
 4.  **Result:** If valid, the controller gets the clean object. If invalid, a 400 Bad Request is thrown.
 
+</details>
+
 53. How do you integrate TypeORM or Prisma with NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **TypeORM:** NestJS has a dedicated `@nestjs/typeorm` package.
     1.  Import `TypeOrmModule.forRoot({ ...config })` in `AppModule`.
     2.  Create Entities (`@Entity()`).
@@ -545,14 +799,24 @@ They work hand-in-hand with the built-in `ValidationPipe`:
     2.  Create a `PrismaService` which extends `PrismaClient` and implements `OnModuleInit`.
     3.  Inject `PrismaService` heavily into any service that needs DB access.
 
+</details>
+
 54. What is the Repository pattern in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 It is an abstraction layer between your business logic (Service) and your data source (Database).
 -   **Role:** The Service should not know *how* to write SQL. It should just say `repo.save(user)`.
 -   **Benefit:** Allows you to swap the underlying database logic without changing the business logic. It also makes unit testing services easy, as you can mock the Repository methods (`find`, `save`, `delete`) instead of mocking a database connection.
 
+</details>
+
 55. How do you handle transactions in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **TypeORM:** usage of `DataSource` (QueryRunner).
     ```typescript
     const queryRunner = this.dataSource.createQueryRunner();
@@ -576,7 +840,10 @@ It is an abstraction layer between your business logic (Service) and your data s
     ]);
     ```
 56. Explain how to perform database migrations in a NestJS project.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Migrations track changes to the database schema over time (version control for DB).
 1.  **TypeORM:**
     -   Setup a datasource config file.
@@ -586,8 +853,13 @@ Migrations track changes to the database schema over time (version control for D
     -   Modify `schema.prisma`.
     -   Run: `npx prisma migrate dev --name init` (This generates SQL files and applies them automatically).
 
+</details>
+
 57. How do you handle relationships (One-to-One, Many-to-Many) in NestJS entities?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You use decorators (if using TypeORM) or the schema language (if using Prisma).
 **TypeORM Example (Many-to-One):**
 ```typescript
@@ -607,27 +879,47 @@ In Prisma, this is defined in the `schema.prisma` file, and NestJS just uses the
 
 ## Authentication & Security
 58. How do you implement JWT authentication in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  Install `@nestjs/jwt` and `@nestjs/passport`.
 2.  Create `AuthService` with a `login` method that takes a user, validates password (bcrypt), and signs a token: `this.jwtService.sign(payload)`.
 3.  Create `JwtStrategy` (extending `PassportStrategy`) that validates incoming tokens.
 4.  Protect routes using `@UseGuards(AuthGuard('jwt'))`.
 
+</details>
+
 59. What is the role of Passport.js in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Passport is a general-purpose authentication middleware for Node.js.
 -   NestJS doesn't reinvent authentication. It provides a wrapper `@nestjs/passport` around this ecosystem.
 -   It allows you to use different "Strategies" (Local/Username-Password, JWT, OAuth/Google, Facebook) interchangeably.
 -   Nest's `AuthGuard` executes these strategies.
 
+</details>
+
 60. How do you implement Rate Limiting (Throttling)?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  Install `@nestjs/throttler`.
 2.  Import `ThrottlerModule.forRoot({ ttl: 60, limit: 10 })` in AppModule (10 requests per 60 seconds).
 3.  Apply globally via `APP_GUARD` or specifically via `@UseGuards(ThrottlerGuard)`.
 4.  You can override limits per controller using `@Throttle(5, 60)`.
 61. How do you enable CORS in a NestJS application?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 CORS (Cross-Origin Resource Sharing) is blocked by browsers by default for security.
 To enable it:
 ```typescript
@@ -640,8 +932,13 @@ app.enableCors({
 await app.listen(3000);
 ```
 
+</details>
+
 62. How do you protect routes based on User Roles?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 This requires a custom Guard and a custom Decorator.
 1.  **Metadata:** Create `@Roles('admin')` decorator (using `SetMetadata`).
 2.  **Guard:** Create `RolesGuard` that reflects on that metadata.
@@ -652,8 +949,13 @@ This requires a custom Guard and a custom Decorator.
     ```
 3.  **Usage:** `@UseGuards(AuthGuard, RolesGuard)` `@Roles('admin')`.
 
+</details>
+
 63. Explain how to use Helmet for security headers.
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Helmet sets various HTTP headers to secure the app (e.g., XSS Protection, Content Security Policy).
 1.  Install: `npm i helmet`
 2.  Register in main.ts:
@@ -666,7 +968,10 @@ Helmet sets various HTTP headers to secure the app (e.g., XSS Protection, Conten
 
 ## Microservices & Advanced Topics
 64. What transport layers does NestJS support for Microservices?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS is transport-agnostic. It supports many built-in transporters:
 -   **TCP** (Default)
 -   **Redis** (Pub/Sub)
@@ -676,8 +981,13 @@ NestJS is transport-agnostic. It supports many built-in transporters:
 -   **Kafka**
 -   **gRPC** (Google's high performance RPC)
 
+</details>
+
 65. What is the difference between Request-Response and Event-based communication?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **Request-Response (`@MessagePattern`):**
     -   Synchronous-like behavior. Service A sends a message to Service B and **waits** for a return value.
     -   *Use Case:* Getting user details, calculating a price.
@@ -685,13 +995,21 @@ NestJS is transport-agnostic. It supports many built-in transporters:
     -   Asynchronous (Fire and Forget). Service A emits an event and **does not wait**. Service B (and C, D) listens and reacts.
     -   *Use Case:* "User Created" event -> Send Email, Update Analytics.
 66. How does a Hybrid Application work in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 A Hybrid Application is an application that listens for HTTP requests **AND** Microservice messages at the same time.
 -   **Method:** You create a standard HTTP app (`NestFactory.create`) and then call `app.connectMicroservice({...})` on it.
 -   **Use Case:** You have a Monolith that serves a REST API to the frontend but also needs to consume messages from a RabbitMQ queue sent by another service.
 
+</details>
+
 67. What are Cron Jobs / Task Scheduling in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS leverages the `@nestjs/schedule` package (wrapper around `node-cron`).
 1.  **Setup:** Import `ScheduleModule.forRoot()` in `AppModule`.
 2.  **Usage:** Use the `@Cron()` decorator on a service method.
@@ -703,15 +1021,25 @@ NestJS leverages the `@nestjs/schedule` package (wrapper around `node-cron`).
     ```
 3.  It also supports Intervals (`@Interval`) and Timeouts (`@Timeout`).
 
+</details>
+
 68. How do you implement WebSockets (Gateways) in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS provides a module `@nestjs/websockets` that works with either **Socket.io** (default) or **ws** (native implementation).
 1.  **Gateway:** Create a class decorated with `@WebSocketGateway()`. This acts like a "Controller" for sockets.
 2.  **Listeners:** Use `@SubscribeMessage('chat')` to listen for events.
 3.  **Emitters:** Use `@MessageBody()` to read data and return data to send an acknowledgment, or inject `WebSocketServer` to broadcast messages.
 
+</details>
+
 69. What is CQRS (Command Query Responsibility Segregation) module in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 CQRS is an advanced architectural pattern usually reserved for complex domains (DDD).
 -   **Segregation:** It splits the application into two sides:
     1.  **Command Side (Write):** Changes state. Uses `CommandBus` to dispatch commands (`CreateUserCommand`). Handlers execute the logic.
@@ -719,8 +1047,13 @@ CQRS is an advanced architectural pattern usually reserved for complex domains (
 -   **Benefit:** Allows scaling reads/writes independently and keeps complex write logic away from simple read logic.
 -   **Module:** `@nestjs/cqrs`.
 
+</details>
+
 70. How does NestJS handle file uploads?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS uses the `multer` middleware (standard in the Node ecosystem) built-in.
 1.  **Interceptor:** Use `FileInterceptor('fieldname')` on the controller route.
 2.  **Decorator:** Use `@UploadedFile()` in the method params.
@@ -733,22 +1066,36 @@ NestJS uses the `multer` middleware (standard in the Node ecosystem) built-in.
     ```
 
 ## Testing & Deployment
+
 71. What testing framework is used by default in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 **Jest** is the default testing framework.
 -   NestJS provides a default configuration for generic Javascript/Typescript testing.
 -   It includes `supertest` for HTTP assertions in E2E tests.
 -   You typically run `npm run test` (for unit) or `npm run test:e2e`.
 
+</details>
+
 72. What is the difference between `.spec.ts` and `.e2e-spec.ts` files?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 -   **`.spec.ts` (Unit Tests):** These test **classes in isolation**. You manually instantiate the class or use a test module that mocks *all* dependencies. They are fast and focused.
     -   *Location:* usually right next to the source file (`cats.controller.ts` -> `cats.controller.spec.ts`).
 -   **`.e2e-spec.ts` (End-to-End Tests):** These test the **entire running application**. It starts the full NestJS application (bootstraps `AppModule`), creates a real HTTP server (often mapped via `supertest`), and hits the actual endpoints (network request level).
     -   *Location:* usually in the `/test` directory at the root.
 
+</details>
+
 73. How do you mock a service in a Unit Test?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 You define a custom provider that replaces the real service token.
 ```typescript
 const mockUsersService = {
@@ -767,22 +1114,40 @@ const module = await Test.createTestingModule({
 }).compile();
 ```
 
+</details>
+
 74. How do you test a Controller with dependencies?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  Use `Test.createTestingModule` to simulate the module.
 2.  Provide the Controller in `controllers`.
 3.  Provide **Mocks** for all the services the controller depends on (as shown in the previous answer).
 4.  Get the instance: `controller = module.get<UsersController>(UsersController)`.
 5.  Call methods: `expect(controller.findAll()).toEqual(...)`.
 
+</details>
+
 75. What is the `Test` class in `@nestjs/testing` used for?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 The `Test` class is a utility provided by NestJS to create an isolated **Testing Module** (similar to `NestFactory.create` but for tests).
 -   It creates an IoC container just for that test suite.
 -   It allows you to override providers easily (`.overrideProvider(Service).useValue(mock)`).
 -   It avoids bootstrapping the entire app if you only want to test one small part.
+
+</details>
+
 76. How do you configure different environments (dev, prod, test) in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Typically via `ConfigModule` and `.env` files.
 1.  **Environment Files:** Create `.env.development`, `.env.production`.
 2.  **ConfigModule:** Configure it to load the correct file based on `NODE_ENV`.
@@ -794,8 +1159,13 @@ Typically via `ConfigModule` and `.env` files.
     ```
 3.  **Cross-Env:** Use the `cross-env` package in `package.json` scripts to set `NODE_ENV` properly on Windows/Linux. (`"start:prod": "cross-env NODE_ENV=production node dist/main"`).
 
+</details>
+
 77. How does Hot Module Replacement (HMR) work in NestJS?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Standard `npm run start:dev` restarts the **entire** server on every file change. HMR swaps **only the changed modules** without a full restart, preserving connection state.
 -   It uses Webpack HMR under the hood.
 -   Requires installing `run-script-webpack-plugin` and modifying `main.ts` to accept hot updates:
@@ -806,8 +1176,13 @@ Standard `npm run start:dev` restarts the **entire** server on every file change
     }
     ```
 
+</details>
+
 78. What are build tags or how do you exclude files from the build?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 NestJS uses `tsconfig.json` to determine what to compile.
 -   **Exclude:** To exclude files (like test files or docs) from the final `./dist` output, you modify the `exclude` array in `tsconfig.build.json`.
     ```json
@@ -815,8 +1190,15 @@ NestJS uses `tsconfig.json` to determine what to compile.
     ```
 -   **Assets:** To copy non-code assets (images, graphql files), use `nest-cli.json` `compilerOptions.assets`.
 
+</details>
+
 79. How do you deploy a NestJS application to a Docker container?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
+</details>
+
 1.  **Build:** Create a `Dockerfile`.
     -   Base Image: `node:18-alpine`.
     -   Install Deps: `npm ci`.
@@ -827,10 +1209,17 @@ NestJS uses `tsconfig.json` to determine what to compile.
     -   Command: `CMD ["node", "dist/main"]`.
 *Tip:* Use multi-stage builds to keep the final image small (exclude `src` and devDependencies).
 
+</details>
+
 80. How do you improve the startup time of a cold serverless NestJS function?
-**Answer:**
+
+<details>
+<summary><strong>Answer</strong></summary>
+
 Serverless (Lambda/Cloud Functions) has a "Cold Start" problem. NestJS is heavy.
 1.  **Webpack:** Bundle the entire app into a single file to reduce disk I/O (built-in in Nest CLI).
 2.  **Lazy Loading:** Do not import expensive modules in `AppModule`. Use `LazyModuleLoader` to load them only when needed.
 3.  **Fastify:** Switch from Express to Fastify for slightly faster boot.
 4.  **Keep Warm:** Use a ping mechanism to keep the lambda alive (though this costs money).
+
+</details>

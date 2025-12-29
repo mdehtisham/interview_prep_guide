@@ -80,10 +80,10 @@ A comprehensive collection of interview preparation materials covering full-stac
 
 - **[JavaScript Interview Questions](javascript%20interview%20questions/README.md)** - Core JavaScript concepts
 
-- **[JavaScript Coding Interview Questions](javascript%20coding%20interview%20questions/)** - Practical coding challenges
-  - Part 1
-  - Part 2
-  - Part 3
+- **[JavaScript Coding Interview Questions](javascript%20coding%20interview%20questions/)** - 120 practical coding challenges
+  - [Easy & Medium Level (1-60)](javascript%20coding%20interview%20questions/01.%20Easy%20&%20Medium%20Level%20(1-60)/)
+  - [Hard Level (61-95)](javascript%20coding%20interview%20questions/02.%20Hard%20Level%20(61-95)/)
+  - [Extra Hard Level (96-120)](javascript%20coding%20interview%20questions/03.%20Extra%20Hard%20Level%20(96-120)/)
 
 - **[JS Raw](js_raw/README.md)** - JavaScript fundamentals and raw concepts
 

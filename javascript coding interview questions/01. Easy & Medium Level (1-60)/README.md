@@ -1,10 +1,21 @@
-# JavaScript Coding Interview Questions
+# Easy & Medium Level (1-60)
 
-A comprehensive collection of frequently asked JavaScript and frontend coding questions in technical interviews, organized by difficulty level.
+Fundamental to intermediate JavaScript coding challenges covering core concepts, basic algorithms, array/string manipulation, and introduction to data structures.
 
 ---
 
-## **EASY LEVEL (1-30)**
+## **Topics Covered**
+- Arrays & Strings manipulation
+- Basic algorithms and sorting
+- Object operations
+- Data transformations
+- Core JavaScript fundamentals
+- Introduction to data structures
+- Basic async patterns
+
+---
+
+## **Questions (1-60)**
 
 ### **Arrays & Strings**
 

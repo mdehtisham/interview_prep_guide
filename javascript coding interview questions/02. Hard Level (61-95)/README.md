@@ -1,3 +1,22 @@
+# Hard Level (61-95)
+
+Advanced JavaScript coding challenges covering complex data structures, DOM manipulation, closures, asynchronous programming, and algorithmic problems.
+
+---
+
+## **Topics Covered**
+- Custom Data Structures (Stack, Queue, Hash Map, Linked List)
+- DOM manipulation and Virtual DOM
+- Closures and advanced scope patterns
+- Asynchronous programming (Promises, async/await)
+- Advanced array and string algorithms
+- Recursion and backtracking
+- Tree and graph algorithms (Binary Search, DFS, BFS)
+
+---
+
+## **Questions (61-95)**
+
 ### **Data Structures**
 
 61. Implement a Stack class

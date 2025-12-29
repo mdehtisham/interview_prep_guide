@@ -1,4 +1,21 @@
+# Extra Hard Level (96-120)
 
+Expert-level JavaScript coding challenges covering complex data structures, advanced algorithms, dynamic programming, system design patterns, and performance optimization.
+
+---
+
+## **Topics Covered**
+- Complex Data Structures (Tries, Graphs, Heaps)
+- Advanced algorithms (Dynamic Programming, Backtracking)
+- System design patterns (LRU Cache, Event Emitter)
+- Performance optimization techniques
+- Complex asynchronous patterns
+- Virtual DOM and rendering optimization
+- Advanced tree and graph problems
+
+---
+
+## **Questions (96-120)**
 ---
 
 ## **EXTRA HARD LEVEL (96-120)**

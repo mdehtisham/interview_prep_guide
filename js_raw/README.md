@@ -105,7 +105,6 @@ This is a curated collection of JavaScript interview questions. Content is organ
 ## 🔗 Related Resources
 
 - [JavaScript Coding Interview Questions](../javascript%20coding%20interview%20questions)
-- [JavaScript Interview Questions (Formatted)](../javascript%20interview%20questions)
 - [React Interview Questions](../React)
 - [NestJS Interview Questions](../nestjs)
 - [TypeScript Interview Questions](../typescript)

@@ -10109,7 +10109,6 @@ REDIS_PASSWORD=secret
 
 </details>
 
-22. What is a job queue and when should you use it?
 
 <details>
 <summary><strong>25. What is Redis and why is it used with Bull?</strong></summary>
@@ -12496,33 +12495,949 @@ export class EmailService {
 <details>
 <summary><strong>40. How do you test scheduled jobs?</strong></summary>
 
-**Answer:**
+**Testing approaches:**
 
-Test scheduled jobs by: **1) Unit test job logic** (test service methods called by jobs), **2) Test job execution** (manually trigger jobs in tests), **3) Mock time** (control scheduler timing), **4) Test with SchedulerRegistry** (add/remove jobs dynamically in tests), **5) Integration tests** (verify job actually runs). **Testing delegated services**: **best approach** - test business logic in services separately (unit test `ReportService.generateDailyReport()`), mock dependencies (repositories, external APIs, config), assert service behavior (returns correct data, handles errors, makes expected calls), services should be unaware of scheduling so normal unit testing applies. **Testing job methods**: create test module with job service, get SchedulerRegistry, manually trigger cron job (`cronJob.fireOnTick()`), verify service method was called with correct parameters, assert logging/error handling, don't rely on actual schedule in tests (too slow/unreliable). **Mocking time**: use `jest.useFakeTimers()` to control time, `jest.advanceTimersByTime(ms)` to simulate time passing, verify cron triggers at expected times, restore real timers after test with `jest.useRealTimers()`. **Example unit test**: mock service method, create job service instance, call job method directly (bypass scheduler), assert service method called with expected args, assert logs/errors handled correctly. **Testing SchedulerRegistry interactions**: test dynamic job addition/removal/update, verify jobs added to registry, manually trigger added jobs, test error handling when job doesn't exist. **Testing queue processors**: inject queue, add job to queue (`queue.add(data, opts)`), processor automatically executes in test environment, assert job completed successfully, check job.returnvalue for results, test error handling (service throws, job marked failed), test retry logic (mock failures, verify retries happen). **Integration tests**: start application in test mode, use Bull test utilities (`queue.process()` immediately processes), trigger jobs via API or time, verify side effects (database records created, emails sent to test inbox, files generated), use test doubles for external services (fake SMTP, S3 mocks). **Best practices**: **don't wait for actual schedule** (too slow for CI, use manual trigger), **test business logic separately** (faster, focused tests), **test job concerns separately** (scheduling, error handling, logging), **use test database** (clean state between tests), **mock external dependencies** (APIs, email service), **test error scenarios** (service throws, retries exhausted, timeout exceeded), **test idempotency** (running twice produces same result).
+**1. Unit test services (not scheduler):**
 
-**Key Takeaway:** Test business logic in services separately (unit tests without scheduler). Test job methods by manually triggering with `cronJob.fireOnTick()` or calling directly, mock time with `jest.useFakeTimers()`, don't rely on actual schedule timing. For queues, add job and assert completion. Test error handling, retries, and idempotency.
+```typescript
+// reports.service.spec.ts
+describe('ReportsService', () => {
+  let service: ReportsService;
+  let mockUsersRepo: jest.Mocked<UsersRepository>;
+  let mockEmailService: jest.Mocked<EmailService>;
+
+  beforeEach(async () => {
+    mockUsersRepo = {
+      find: jest.fn(),
+    } as any;
+    
+    mockEmailService = {
+      send: jest.fn(),
+    } as any;
+
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: UsersRepository, useValue: mockUsersRepo },
+        { provide: EmailService, useValue: mockEmailService },
+      ],
+    }).compile();
+
+    service = module.get<ReportsService>(ReportsService);
+  });
+
+  it('should generate daily report', async () => {
+    // Mock data
+    mockUsersRepo.find.mockResolvedValue([
+      { id: 1, email: 'user1@example.com' },
+      { id: 2, email: 'user2@example.com' },
+    ]);
+
+    // Execute service method directly (no scheduler)
+    const result = await service.generateDailyReport(new Date());
+
+    // Assert
+    expect(mockUsersRepo.find).toHaveBeenCalledWith({ active: true });
+    expect(result.userCount).toBe(2);
+  });
+
+  it('should handle errors gracefully', async () => {
+    mockUsersRepo.find.mockRejectedValue(new Error('Database error'));
+
+    await expect(service.generateDailyReport(new Date())).rejects.toThrow('Database error');
+  });
+});
+```
+
+**2. Test job methods (manually trigger):**
+
+```typescript
+// tasks.service.spec.ts
+describe('TasksService', () => {
+  let service: TasksService;
+  let mockReportsService: jest.Mocked<ReportsService>;
+  let mockLogger: jest.Mocked<Logger>;
+
+  beforeEach(async () => {
+    mockReportsService = {
+      generateDailyReport: jest.fn(),
+    } as any;
+
+    mockLogger = {
+      log: jest.fn(),
+      error: jest.fn(),
+    } as any;
+
+    const module = await Test.createTestingModule({
+      providers: [
+        TasksService,
+        { provide: ReportsService, useValue: mockReportsService },
+        { provide: Logger, useValue: mockLogger },
+      ],
+    }).compile();
+
+    service = module.get<TasksService>(TasksService);
+  });
+
+  it('should call service when cron job executes', async () => {
+    mockReportsService.generateDailyReport.mockResolvedValue({ id: '123' });
+
+    // Call job method directly (bypass scheduler)
+    await service.dailyReport();
+
+    // Assert service was called
+    expect(mockReportsService.generateDailyReport).toHaveBeenCalledTimes(1);
+    expect(mockLogger.log).toHaveBeenCalledWith(
+      expect.stringContaining('Report generated')
+    );
+  });
+
+  it('should log error when service fails', async () => {
+    mockReportsService.generateDailyReport.mockRejectedValue(
+      new Error('Report failed')
+    );
+
+    await expect(service.dailyReport()).rejects.toThrow('Report failed');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Report generation failed'),
+      expect.any(Error)
+    );
+  });
+});
+```
+
+**3. Test with SchedulerRegistry (manual trigger):**
+
+```typescript
+import { SchedulerRegistry } from '@nestjs/schedule';
+
+describe('TasksService with Scheduler', () => {
+  let schedulerRegistry: SchedulerRegistry;
+  let service: TasksService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      imports: [ScheduleModule.forRoot()],
+      providers: [TasksService, ReportsService],
+    }).compile();
+
+    schedulerRegistry = module.get<SchedulerRegistry>(SchedulerRegistry);
+    service = module.get<TasksService>(TasksService);
+  });
+
+  it('should manually trigger cron job', async () => {
+    const spy = jest.spyOn(service, 'dailyReport');
+
+    // Get cron job from registry
+    const cronJob = schedulerRegistry.getCronJob('dailyReport');
+    
+    // Manually trigger
+    await cronJob.fireOnTick();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+**4. Mock time with Jest:**
+
+```typescript
+describe('Scheduled timing', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should trigger job at scheduled time', async () => {
+    const mockCallback = jest.fn();
+    
+    // Create cron job for every minute
+    const cronJob = new CronJob('*/1 * * * *', mockCallback);
+    cronJob.start();
+
+    // Advance time by 1 minute
+    jest.advanceTimersByTime(60000);
+
+    expect(mockCallback).toHaveBeenCalledTimes(1);
+
+    // Advance another minute
+    jest.advanceTimersByTime(60000);
+
+    expect(mockCallback).toHaveBeenCalledTimes(2);
+  });
+});
+```
+
+**5. Test queue processors:**
+
+```typescript
+import { Queue } from 'bull';
+
+describe('EmailProcessor', () => {
+  let queue: Queue;
+  let processor: EmailProcessor;
+  let mockEmailService: jest.Mocked<EmailService>;
+
+  beforeEach(async () => {
+    mockEmailService = {
+      send: jest.fn().mockResolvedValue({ messageId: '123' }),
+    } as any;
+
+    const module = await Test.createTestingModule({
+      imports: [
+        BullModule.registerQueue({ name: 'emails' }),
+      ],
+      providers: [
+        EmailProcessor,
+        { provide: EmailService, useValue: mockEmailService },
+      ],
+    }).compile();
+
+    processor = module.get<EmailProcessor>(EmailProcessor);
+    queue = module.get<Queue>('BullQueue_emails');
+  });
+
+  it('should process email job successfully', async () => {
+    // Add job to queue
+    const job = await queue.add('send-email', {
+      to: 'user@example.com',
+      subject: 'Test',
+      body: 'Hello',
+    });
+
+    // Wait for processing
+    await job.finished();
+
+    // Assert
+    expect(mockEmailService.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      subject: 'Test',
+      body: 'Hello',
+    });
+    
+    const state = await job.getState();
+    expect(state).toBe('completed');
+  });
+
+  it('should retry failed jobs', async () => {
+    // Mock failure then success
+    mockEmailService.send
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({ messageId: '123' });
+
+    const job = await queue.add('send-email', 
+      { to: 'user@example.com' },
+      { attempts: 3 }
+    );
+
+    await job.finished();
+
+    // Should have retried
+    expect(mockEmailService.send).toHaveBeenCalledTimes(2);
+  });
+});
+```
+
+**6. Integration tests:**
+
+```typescript
+describe('Tasks Integration', () => {
+  let app: INestApplication;
+  let tasksService: TasksService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(EmailService)
+      .useValue({
+        send: jest.fn().mockResolvedValue({ sent: true }),
+      })
+      .compile();
+
+    app = module.createNestApplication();
+    await app.init();
+
+    tasksService = module.get<TasksService>(TasksService);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('should execute scheduled job and persist results', async () => {
+    // Trigger job
+    await tasksService.dailyReport();
+
+    // Verify side effects in database
+    const reportRepo = app.get(ReportsRepository);
+    const reports = await reportRepo.find({
+      where: { date: new Date() },
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0].status).toBe('completed');
+  });
+});
+```
+
+**7. Test idempotency:**
+
+```typescript
+it('should be idempotent (safe to run twice)', async () => {
+  const userId = 'test-user-123';
+
+  // Run job twice
+  await service.sendWelcomeEmail(userId);
+  await service.sendWelcomeEmail(userId);
+
+  // Should only send one email
+  const emailLogs = await emailLogsRepo.find({ userId, type: 'welcome' });
+  expect(emailLogs).toHaveLength(1);
+});
+```
+
+**Best practices:**
+
+- **Test services, not schedulers:** Unit test business logic separately
+- **Don't wait for actual schedule:** Too slow for CI, use manual triggers
+- **Mock time:** Use `jest.useFakeTimers()` for time-based tests
+- **Test error scenarios:** Service failures, retries exhausted, timeouts
+- **Test idempotency:** Safe to run multiple times
+- **Use test database:** Clean state between tests
+- **Mock external services:** APIs, email, S3
+- **Integration tests:** Verify end-to-end with real side effects
+- **Test retry logic:** Mock failures to verify retry behavior
+- **Measure coverage:** Aim for >80% on business logic
 
 </details>
 
 <details>
 <summary><strong>41. How do you handle timezone considerations?</strong></summary>
 
-**Answer:**
+**Best practice: Use UTC everywhere**
 
-Handle timezone considerations by: **1) Use UTC** for all cron schedules (consistent across servers), **2) Convert user timezones** to UTC for scheduling, **3) Store UTC timestamps** in database, **4) Set timezone in cron options** if user-specific timing needed, **5) Use timezone-aware libraries** (moment-timezone, date-fns-tz), **6) Configure server timezone** consistently across instances. **Best practice: UTC everywhere**: schedule cron jobs in UTC (`@Cron('0 2 * * *', { timeZone: 'UTC' })`), store all timestamps in UTC in database, convert to user timezone only for display, prevents issues with daylight saving time (DST) transitions and multi-region deployments. **Timezone option in @Cron**: specify timezone in options object (`@Cron('0 9 * * *', { timeZone: 'America/New_York' })`), job runs at 9 AM Eastern time regardless of server timezone, useful for region-specific jobs (US-only reports), uses IANA timezone database (America/New_York, Europe/London, Asia/Tokyo). **User-specific scheduling**: when users schedule jobs in their timezone, convert to UTC before storing, example: user in PST schedules 9 AM (UTC-8), store as 5 PM UTC (9+8), when scheduling, use UTC time, for display convert back to user timezone. **DST handling**: UTC doesn't observe DST (no time changes), cron expressions in UTC are stable and predictable, if using local timezone with DST (America/New_York), job timing shifts during DST transitions (2 AM becomes 3 AM in spring), generally avoid local timezone unless specifically required. **Dynamic scheduling**: use SchedulerRegistry for user-specific scheduling, calculate cron expression in user timezone or convert to UTC, store timezone with job metadata for display purposes, recalculate if user changes timezone preference. **Multi-region considerations**: deploy in multiple regions (US, EU, Asia), all run jobs in UTC to prevent duplicates, use distributed locks to ensure single execution if jobs shouldn't run in every region, for region-specific jobs use timezone option to match local business hours. **Testing timezone logic**: set `TZ` environment variable in tests (`process.env.TZ = 'America/New_York'`), test DST transitions (spring forward, fall back), verify jobs run at expected times in different timezones, test UTC conversion accuracy. **Common pitfalls**: server timezone differs from code expectation (set explicitly in Docker/VM), mixing UTC and local times (always use UTC internally), forgetting DST transitions (can cause 1-hour shift in local timezone schedules), hardcoding timezone offsets instead of using IANA names (breaks with DST changes).
+**1. Schedule all cron jobs in UTC:**
 
-**Key Takeaway:** Use UTC for all internal scheduling (`@Cron('0 2 * * *', { timeZone: 'UTC' })`), store UTC timestamps in database, convert to user timezone only for display. For user-specific timing, use timezone option with IANA names (`America/New_York`). Prevents DST issues and ensures consistency across regions/servers.
+```typescript
+@Injectable()
+export class TasksService {
+  // ✅ Good: Explicit UTC
+  @Cron('0 2 * * *', { 
+    name: 'daily-cleanup',
+    timeZone: 'UTC' 
+  })
+  async dailyCleanup() {
+    // Runs at 2 AM UTC every day
+    // Consistent across all servers regardless of their timezone
+  }
+
+  // ❌ Bad: No timezone specified (uses server timezone)
+  @Cron('0 2 * * *')
+  async inconsistentJob() {
+    // Time varies based on server timezone
+    // Different behavior in dev vs production
+  }
+}
+```
+
+**2. Region-specific jobs:**
+
+```typescript
+@Injectable()
+export class ReportsService {
+  // US business hours (9 AM Eastern)
+  @Cron('0 9 * * *', { 
+    name: 'us-morning-report',
+    timeZone: 'America/New_York' 
+  })
+  async usMorningReport() {
+    // Always 9 AM ET, adjusts for DST automatically
+  }
+
+  // EU business hours (9 AM London)
+  @Cron('0 9 * * *', { 
+    name: 'eu-morning-report',
+    timeZone: 'Europe/London' 
+  })
+  async euMorningReport() {
+    // Always 9 AM GMT/BST, handles DST
+  }
+
+  // Asia business hours (9 AM Tokyo)
+  @Cron('0 9 * * *', { 
+    name: 'asia-morning-report',
+    timeZone: 'Asia/Tokyo' 
+  })
+  async asiaMorningReport() {
+    // Always 9 AM JST (no DST in Japan)
+  }
+}
+```
+
+**3. User-specific scheduling (convert to UTC):**
+
+```typescript
+@Injectable()
+export class UserSchedulingService {
+  constructor(
+    private schedulerRegistry: SchedulerRegistry,
+  ) {}
+
+  async scheduleUserReport(userId: string, localTime: string, timezone: string) {
+    // User wants report at 9 AM in their timezone
+    // Convert to UTC for storage and scheduling
+    
+    const cronExpression = this.convertToCron(localTime, timezone);
+    
+    const job = new CronJob(cronExpression, async () => {
+      await this.generateReport(userId);
+    }, null, true, 'UTC'); // Always schedule in UTC
+
+    this.schedulerRegistry.addCronJob(`user-report-${userId}`, job);
+    job.start();
+
+    // Store in database
+    await this.userSchedulesRepo.save({
+      userId,
+      localTime, // "09:00"
+      timezone,  // "America/Los_Angeles"
+      cronExpression, // Converted to UTC
+      createdAt: new Date(), // Store in UTC
+    });
+  }
+
+  private convertToCron(localTime: string, timezone: string): string {
+    // Convert local time to UTC cron expression
+    const [hours, minutes] = localTime.split(':').map(Number);
+    
+    // Use library like moment-timezone for conversion
+    const moment = require('moment-timezone');
+    const utcTime = moment.tz({ hours, minutes }, timezone).utc();
+    
+    return `${utcTime.minutes()} ${utcTime.hours()} * * *`;
+  }
+}
+```
+
+**4. Store UTC, display in user timezone:**
+
+```typescript
+@Injectable()
+export class JobHistoryService {
+  async getJobHistory(userId: string, userTimezone: string) {
+    // Fetch from database (stored in UTC)
+    const jobs = await this.jobHistoryRepo.find({ userId });
+
+    // Convert to user timezone for display
+    return jobs.map(job => ({
+      ...job,
+      executedAt: this.convertToUserTimezone(job.executedAt, userTimezone),
+      scheduledFor: this.convertToUserTimezone(job.scheduledFor, userTimezone),
+    }));
+  }
+
+  private convertToUserTimezone(utcDate: Date, timezone: string): string {
+    const moment = require('moment-timezone');
+    return moment(utcDate).tz(timezone).format('YYYY-MM-DD HH:mm:ss z');
+  }
+}
+```
+
+**5. DST handling:**
+
+```typescript
+@Injectable()
+export class SchedulingService {
+  // ✅ Good: UTC doesn't have DST
+  @Cron('0 2 * * *', { timeZone: 'UTC' })
+  async utcJob() {
+    // Always runs at 2 AM UTC
+    // No DST issues
+  }
+
+  // ⚠️ Careful: Local timezone has DST transitions
+  @Cron('0 2 * * *', { timeZone: 'America/New_York' })
+  async localJob() {
+    // On DST transition days (March/November):
+    // - Spring forward: 2 AM doesn't exist (skipped)
+    // - Fall back: 2 AM happens twice
+    // NestJS/node-cron handles this, but be aware
+  }
+}
+```
+
+**6. Multi-region deployments:**
+
+```typescript
+// config/scheduling.config.ts
+export const schedulingConfig = {
+  // All instances use UTC
+  defaultTimezone: 'UTC',
+  
+  // Region-specific jobs
+  regions: {
+    us: {
+      timezone: 'America/New_York',
+      businessHoursStart: '09:00',
+      businessHoursEnd: '17:00',
+    },
+    eu: {
+      timezone: 'Europe/London',
+      businessHoursStart: '09:00',
+      businessHoursEnd: '17:00',
+    },
+    asia: {
+      timezone: 'Asia/Tokyo',
+      businessHoursStart: '09:00',
+      businessHoursEnd: '17:00',
+    },
+  },
+};
+
+// tasks.service.ts
+@Injectable()
+export class TasksService {
+  @Cron('0 2 * * *', { timeZone: 'UTC' })
+  async globalCleanup() {
+    // Runs once globally at 2 AM UTC
+    // Use distributed lock to prevent duplicate execution
+    // See Q35 for lock implementation
+  }
+
+  @Cron('0 9 * * 1-5', { timeZone: 'America/New_York' })
+  async usBusinessHoursJob() {
+    // Runs only during US business hours (9 AM ET, Mon-Fri)
+    // Won't execute in other regions
+  }
+}
+```
+
+**7. Testing timezone logic:**
+
+```typescript
+describe('Timezone handling', () => {
+  it('should schedule job in correct timezone', () => {
+    process.env.TZ = 'America/New_York';
+
+    const service = new SchedulingService();
+    const scheduledTime = service.getNextExecution('0 9 * * *', 'America/New_York');
+
+    expect(scheduledTime.hours()).toBe(9);
+  });
+
+  it('should handle DST transition', () => {
+    // Test spring forward (2 AM → 3 AM)
+    const springForward = new Date('2025-03-09T02:00:00-05:00');
+    // Test fall back (2 AM happens twice)
+    const fallBack = new Date('2025-11-02T02:00:00-04:00');
+
+    // Verify job behavior during DST transitions
+  });
+
+  it('should convert user timezone to UTC', () => {
+    const result = service.convertToCron('09:00', 'America/Los_Angeles');
+    
+    // 9 AM PST = 5 PM UTC (during standard time)
+    // 9 AM PDT = 4 PM UTC (during daylight time)
+    expect(result).toMatch(/^0 (16|17) \* \* \*$/);
+  });
+});
+```
+
+**8. Database schema:**
+
+```typescript
+@Entity()
+export class ScheduledJob {
+  @Column({ type: 'timestamp with time zone' })
+  createdAt: Date; // Always UTC
+
+  @Column({ type: 'timestamp with time zone' })
+  nextExecutionAt: Date; // Always UTC
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  lastExecutedAt: Date; // Always UTC
+
+  @Column()
+  userTimezone: string; // For display: 'America/New_York'
+
+  @Column()
+  userLocalTime: string; // For display: '09:00'
+
+  @Column()
+  cronExpression: string; // Always in UTC: '0 14 * * *'
+}
+```
+
+**Common pitfalls:**
+
+- ❌ **No timezone specified:** Uses server timezone (inconsistent across environments)
+- ❌ **Hardcoding offsets:** `UTC+5` breaks during DST
+- ❌ **Mixing UTC and local:** Store UTC, convert only for display
+- ❌ **Ignoring DST:** Jobs can skip or duplicate during transitions
+- ❌ **Wrong IANA name:** Use `America/New_York`, not `EST` or `EDT`
+
+**Best practices:**
+
+- **Use UTC internally:** All cron expressions, database timestamps
+- **Use IANA timezone names:** `America/New_York`, not abbreviations
+- **Explicit timezone option:** Always specify `{ timeZone: 'UTC' }`
+- **Convert for display only:** Show users their local time
+- **Test DST transitions:** Verify behavior on transition days
+- **Document timezone:** Comment which timezone each job uses
+- **Consistent across environments:** Same timezone in dev/staging/prod
 
 </details>
 
 <details>
 <summary><strong>42. How do you prevent jobs from overlapping (job locking)?</strong></summary>
 
-**Answer:**
+**Problem:** Long-running job still executing when next schedule triggers
 
-Prevent job overlapping using: **1) Check if job still running** before starting new execution, **2) Use mutex/lock** (Redis-based distributed lock), **3) Track execution state** (store "running" flag in database or Redis), **4) Skip execution** if previous still active, **5) Use job queue** instead of cron (Bull prevents concurrent processing of same job), **6) Set appropriate cron frequency** (ensure job completes before next trigger). **Why prevent overlapping**: long-running job might still execute when next scheduled time arrives, concurrent executions cause race conditions (duplicate processing, data corruption), resource exhaustion (too many instances running simultaneously), need guarantee only one execution at a time. **Simple approach: flag check**: set flag at job start (Redis SET lock:jobName true EX 3600), check flag before execution (if exists, skip this run), clear flag at completion (Redis DEL lock:jobName), use short TTL as safety (auto-expire if job crashes and doesn't clear). **Distributed lock pattern**: use Redlock library for reliable distributed locking (`npm install redlock`, `const lock = await redlock.acquire(['locks:daily-report'], 3600000)`), lock has TTL (auto-releases if job crashes), only instance acquiring lock runs job, others skip execution, release lock in finally block (`await lock.release()`). **Example implementation**: in `@Cron()` method, acquire lock with `await redlock.acquire([resource], ttl)`, if acquisition fails (returns null or throws), log "job already running" and return early, execute job logic inside try block, release lock in finally block, use reasonable TTL (2-3x expected job duration). **Database flag approach**: add "is_running" boolean column to job metadata table, query and update atomically (`UPDATE jobs SET is_running = true WHERE name = 'daily-report' AND is_running = false`), if update affected 0 rows (job already running), skip execution, set is_running = false on completion, less reliable than Redis (slower, database might be bottleneck) but doesn't require additional infrastructure. **Using Bull queue instead**: cron job adds task to Bull queue (not process directly), Bull ensures single processing (concurrency: 1 for sequential), job in queue waits if previous execution still running, provides automatic retry and progress tracking, best solution for jobs needing reliability. **Skip vs wait**: **skip approach** (return early if locked) - simple, appropriate for periodic jobs that can skip (health checks, cache refresh), **wait approach** (queue job or wait for lock) - ensures all executions happen, appropriate for critical jobs (billing, data sync). **Timeout handling**: set lock TTL slightly longer than max expected job duration, if job exceeds TTL, lock auto-releases (prevents permanent deadlock), next execution can proceed, log warning if job exceeds expected duration.
+**Solutions:**
 
-**Key Takeaway:** Use distributed locks (Redlock) to prevent overlapping: `const lock = await redlock.acquire(['locks:jobName'], ttlMs)`, execute job only if lock acquired, release in finally block. Simple flag check with Redis SET/DEL also works. For complex jobs, use Bull queue (concurrency: 1) with cron trigger instead of direct execution.
+**1. Redis flag (simple approach):**
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { InjectRedis } from '@liaoliaots/nestjs-redis';
+import Redis from 'ioredis';
+
+@Injectable()
+export class TasksService {
+  constructor(@InjectRedis() private readonly redis: Redis) {}
+
+  @Cron('*/5 * * * *') // Every 5 minutes
+  async processData() {
+    const lockKey = 'lock:process-data';
+    const lockTTL = 300; // 5 minutes in seconds
+
+    // Try to acquire lock
+    const acquired = await this.redis.set(
+      lockKey,
+      Date.now().toString(),
+      'EX',
+      lockTTL,
+      'NX' // Set if Not eXists
+    );
+
+    if (!acquired) {
+      this.logger.log('Job already running, skipping this execution');
+      return;
+    }
+
+    try {
+      // Execute job
+      await this.performDataProcessing();
+    } finally {
+      // Release lock
+      await this.redis.del(lockKey);
+    }
+  }
+
+  private async performDataProcessing() {
+    // Long-running operation
+    this.logger.log('Processing data...');
+    await this.heavyOperation();
+    this.logger.log('Processing complete');
+  }
+}
+```
+
+**2. Redlock (production-grade):**
+
+```typescript
+import Redlock from 'redlock';
+import Redis from 'ioredis';
+
+@Injectable()
+export class LockingService {
+  private redlock: Redlock;
+
+  constructor() {
+    const redis = new Redis(process.env.REDIS_URL);
+    
+    this.redlock = new Redlock([redis], {
+      driftFactor: 0.01,
+      retryCount: 3,
+      retryDelay: 200,
+      retryJitter: 200,
+    });
+  }
+
+  @Cron('0 2 * * *') // Daily at 2 AM
+  async dailyReport() {
+    const resource = 'locks:daily-report';
+    const ttl = 3600000; // 1 hour
+
+    let lock;
+    try {
+      // Acquire lock with TTL
+      lock = await this.redlock.acquire([resource], ttl);
+      
+      this.logger.log('Lock acquired, generating report');
+      await this.generateReport();
+      
+    } catch (error) {
+      // Another instance has lock or Redis error
+      if (error instanceof Redlock.LockError) {
+        this.logger.log('Could not acquire lock, job already running');
+      } else {
+        this.logger.error('Lock acquisition failed', error);
+      }
+    } finally {
+      // Always release lock
+      if (lock) {
+        try {
+          await lock.release();
+          this.logger.log('Lock released');
+        } catch (error) {
+          this.logger.error('Lock release failed', error);
+        }
+      }
+    }
+  }
+}
+```
+
+**3. Database flag (no Redis):**
+
+```typescript
+@Injectable()
+export class DatabaseLockingService {
+  constructor(private jobLockRepo: JobLockRepository) {}
+
+  @Cron('0 * * * *') // Hourly
+  async hourlySync() {
+    const jobName = 'hourly-sync';
+
+    // Atomic update: set is_running = true WHERE is_running = false
+    const result = await this.jobLockRepo.query(`
+      UPDATE job_locks 
+      SET 
+        is_running = true,
+        started_at = NOW()
+      WHERE 
+        job_name = $1 
+        AND is_running = false
+      RETURNING id
+    `, [jobName]);
+
+    if (result.length === 0) {
+      this.logger.log('Job already running (database lock held)');
+      return;
+    }
+
+    try {
+      await this.performSync();
+    } finally {
+      // Release lock
+      await this.jobLockRepo.update(
+        { jobName },
+        { 
+          isRunning: false,
+          completedAt: new Date(),
+        }
+      );
+    }
+  }
+}
+
+// Entity
+@Entity('job_locks')
+export class JobLock {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ unique: true })
+  jobName: string;
+
+  @Column({ default: false })
+  isRunning: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  startedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  completedAt: Date;
+}
+```
+
+**4. Bull queue (concurrency control):**
+
+```typescript
+// Instead of direct cron execution, use queue
+@Injectable()
+export class SchedulingService {
+  constructor(
+    @InjectQueue('reports') private reportsQueue: Queue,
+  ) {}
+
+  @Cron('0 2 * * *')
+  async scheduleReport() {
+    // Cron just adds job to queue
+    await this.reportsQueue.add('daily-report', {}, {
+      jobId: `daily-report-${new Date().toISOString().split('T')[0]}`, // Unique per day
+      removeOnComplete: true,
+    });
+    
+    this.logger.log('Report job queued');
+  }
+}
+
+// Processor with concurrency: 1 (sequential)
+@Processor('reports')
+export class ReportsProcessor {
+  @Process({ name: 'daily-report', concurrency: 1 })
+  async generateReport(job: Job) {
+    // Bull ensures only one job processes at a time
+    // If job still running, next one waits in queue
+    await this.performReportGeneration();
+    return { success: true };
+  }
+}
+```
+
+**5. Lock with timeout extension:**
+
+```typescript
+@Injectable()
+export class ExtendableLockService {
+  private redlock: Redlock;
+
+  @Cron('0 3 * * *')
+  async veryLongJob() {
+    const resource = 'locks:long-job';
+    let ttl = 1800000; // 30 minutes initial
+
+    let lock = await this.redlock.acquire([resource], ttl);
+
+    try {
+      const chunks = await this.getDataChunks();
+      
+      for (let i = 0; i < chunks.length; i++) {
+        // Check if approaching TTL expiration
+        const timeElapsed = Date.now() - lock.expiration + ttl;
+        if (timeElapsed > ttl * 0.8) { // 80% of TTL
+          // Extend lock by another 30 minutes
+          lock = await lock.extend(1800000);
+          this.logger.log('Lock extended');
+        }
+
+        await this.processChunk(chunks[i]);
+      }
+    } finally {
+      await lock.release();
+    }
+  }
+}
+```
+
+**6. Skip vs Wait strategy:**
+
+```typescript
+@Injectable()
+export class StrategyService {
+  // Skip strategy: Job can be skipped
+  @Cron('*/1 * * * *') // Every minute
+  async healthCheck() {
+    const acquired = await this.redis.set('lock:health', '1', 'EX', 60, 'NX');
+    
+    if (!acquired) {
+      // Skip this execution, next one will run
+      return;
+    }
+
+    try {
+      await this.checkHealth();
+    } finally {
+      await this.redis.del('lock:health');
+    }
+  }
+
+  // Wait strategy: All executions must happen
+  @Cron('0 * * * *') // Hourly
+  async criticalSync() {
+    // Use queue instead of skipping
+    await this.syncQueue.add('sync', {}, {
+      jobId: `sync-${Date.now()}`,
+      attempts: 5,
+    });
+    
+    // Queue ensures all jobs execute eventually
+    // If one is running, others wait in queue
+  }
+}
+```
+
+**7. Monitor lock duration:**
+
+```typescript
+@Injectable()
+export class MonitoredLockService {
+  @Cron('0 2 * * *')
+  async monitoredJob() {
+    const lockKey = 'lock:monitored-job';
+    const expectedDuration = 600000; // 10 minutes
+    const lockTTL = 1800; // 30 minutes (3x expected)
+
+    const startTime = Date.now();
+    const acquired = await this.redis.set(lockKey, startTime.toString(), 'EX', lockTTL, 'NX');
+
+    if (!acquired) {
+      // Check how long current lock has been held
+      const lockValue = await this.redis.get(lockKey);
+      const lockAge = Date.now() - parseInt(lockValue);
+      
+      if (lockAge > expectedDuration * 2) {
+        // Lock held too long, alert
+        await this.alertService.send({
+          severity: 'warning',
+          message: `Job lock held for ${lockAge}ms (expected ${expectedDuration}ms)`,
+        });
+      }
+      
+      return;
+    }
+
+    try {
+      await this.performJob();
+      
+      const duration = Date.now() - startTime;
+      if (duration > expectedDuration) {
+        this.logger.warn(`Job took ${duration}ms (expected ${expectedDuration}ms)`);
+      }
+    } finally {
+      await this.redis.del(lockKey);
+    }
+  }
+}
+```
+
+**Comparison:**
+
+| Approach | Pros | Cons | Use When |
+|----------|------|------|----------|
+| Redis flag | Simple, fast | No quorum, SPOF | Small deployments |
+| Redlock | Production-ready, tested | Complex setup | Production clusters |
+| Database flag | No extra infra | Slower, DB bottleneck | Redis not available |
+| Bull queue | Built-in, monitoring | Requires Bull setup | Heavy/complex jobs |
+
+**Best practices:**
+
+- **Set appropriate TTL:** 2-3x expected job duration
+- **Always use finally:** Release lock even on errors
+- **Monitor lock age:** Alert if held too long
+- **Idempotent operations:** Safe even if overlap occurs
+- **Log lock acquisition:** Track which instance has lock
+- **Test lock expiration:** Verify TTL releases lock
+- **Use descriptive keys:** `locks:job-name` not just `lock`
+- **Handle Redis failures:** Gracefully skip execution if Redis down
 
 </details>
 
@@ -12530,33 +13445,995 @@ Prevent job overlapping using: **1) Check if job still running** before starting
 <details>
 <summary><strong>43. Should you run scheduled jobs in production on all instances?</strong></summary>
 
-**Answer:**
+**Answer: It depends on job type**
 
-**It depends on job type**: **Don't run on all instances** for jobs that should execute once (data cleanup, report generation, external API sync), **Do run on all instances** for jobs that are instance-specific (health checks, local cache refresh, metrics collection). **Problem with running everywhere**: if 5 instances each run `@Cron('0 2 * * *')` daily cleanup, job executes 5 times simultaneously, causes duplicate processing (5 emails sent, 5 reports generated), database contention (concurrent deletes/updates), wasted resources (5x processing for same result). **Solution approaches**: **1) Dedicated job instance** (single server runs all cron jobs, other servers just handle API traffic), **2) Distributed locks** (all instances have jobs but only one executes via lock), **3) Leader election** (elect single leader to run jobs, automatic failover), **4) Cron + Queue hybrid** (one instance adds to queue with lock, queue workers process), **5) External scheduler** (AWS EventBridge, Cloud Scheduler triggers single instance). **Dedicated job instance**: deploy one instance with `RUN_JOBS=true` env var, `if (process.env.RUN_JOBS === 'true') { ScheduleModule.register() }`, other instances don't register schedule module, simple and effective, SPOF (if job instance crashes, no jobs run), need monitoring and auto-restart. **Distributed locks**: all instances have cron code, first to acquire Redis lock executes (others skip), automatic failover (if instance crashes, another acquires lock next time), slightly more complex but more resilient, see Q44 for implementation. **Leader election**: use library like `@nestjs-modules/ioredis` with leader election, only elected leader runs cron jobs, automatic re-election if leader fails, more complex setup but production-ready. **Cron + Queue**: cron adds job to Bull queue (with distributed lock for this step), queue workers process job (Bull handles coordination), best practice for most production systems, separates scheduling from processing. **Instance-specific jobs**: some jobs SHOULD run on every instance: health checks (check instance health), local cache refresh (each instance has its own cache), metrics collection (per-instance metrics), log rotation (instance-specific logs), these benefit from running everywhere and don't need locks. **Best practices**: for single-execution jobs (cleanup, reports, sync) use dedicated instance OR distributed locks, for instance-specific jobs (health, metrics) run on all, prefer Cron+Queue hybrid for production (resilience, scalability, monitoring), implement health checks to ensure jobs are running, alert if jobs haven't run in expected time window, test failover scenarios (what happens when job instance crashes).
+**❌ Don't run on all instances (causes duplicates):**
 
-**Key Takeaway:** Don't run single-execution jobs (cleanup, reports, sync) on all instances without locks - causes duplicates. Use dedicated job instance (`RUN_JOBS=true` env var), distributed locks (only one instance executes), leader election, or Cron+Queue hybrid (one adds to queue, workers process). Do run instance-specific jobs (health checks, local cache) everywhere.
+- Data cleanup
+- Report generation  
+- External API sync
+- Email notifications
+- Database migrations
+- Billing operations
+
+**✅ Do run on all instances (instance-specific):**
+
+- Health checks (per instance)
+- Local cache refresh
+- Metrics collection (per instance)
+- Log rotation (instance logs)
+
+**Solutions:**
+
+**1. Dedicated job instance (simple):**
+
+```typescript
+// app.module.ts
+@Module({
+  imports: [
+    // Only register scheduler on job instance
+    ...(process.env.RUN_JOBS === 'true' ? [ScheduleModule.forRoot()] : []),
+  ],
+})
+export class AppModule {}
+
+// docker-compose.yml
+services:
+  api-1:
+    environment:
+      - RUN_JOBS=false  # No jobs
+  
+  api-2:
+    environment:
+      - RUN_JOBS=false  # No jobs
+  
+  jobs:
+    environment:
+      - RUN_JOBS=true   # Only this instance runs jobs
+```
+
+**Pros:**
+- Simple configuration
+- Clear separation
+
+**Cons:**
+- Single point of failure
+- No automatic failover
+
+**2. Distributed locks (resilient):**
+
+```typescript
+import Redlock from 'redlock';
+
+@Injectable()
+export class TasksService {
+  private redlock: Redlock;
+
+  constructor() {
+    const redis = new Redis(process.env.REDIS_URL);
+    this.redlock = new Redlock([redis]);
+  }
+
+  // Runs on ALL instances, but only one executes
+  @Cron('0 2 * * *')
+  async dailyCleanup() {
+    let lock;
+    try {
+      lock = await this.redlock.acquire(['locks:daily-cleanup'], 3600000);
+      
+      // Only this instance has lock
+      this.logger.log(`Instance ${process.env.INSTANCE_ID} acquired lock`);
+      await this.performCleanup();
+      
+    } catch (error) {
+      // Another instance has lock, skip
+      this.logger.log('Lock held by another instance, skipping');
+    } finally {
+      if (lock) await lock.release();
+    }
+  }
+}
+```
+
+**Pros:**
+- Automatic failover (if one instance crashes, another acquires lock)
+- All instances have job code
+
+**Cons:**
+- Requires Redis
+- More complex
+
+**3. Leader election:**
+
+```typescript
+import { LeaderElection } from '@nestjs-modules/ioredis-leader';
+
+@Injectable()
+export class TasksService {
+  private isLeader = false;
+
+  constructor(private leaderElection: LeaderElection) {
+    this.setupLeaderElection();
+  }
+
+  private async setupLeaderElection() {
+    this.leaderElection.on('elected', () => {
+      this.isLeader = true;
+      this.logger.log('This instance is now the leader');
+    });
+
+    this.leaderElection.on('demoted', () => {
+      this.isLeader = false;
+      this.logger.log('This instance is no longer the leader');
+    });
+  }
+
+  @Cron('0 * * * *')
+  async hourlyTask() {
+    if (!this.isLeader) {
+      this.logger.log('Not the leader, skipping');
+      return;
+    }
+
+    // Only leader executes
+    await this.performTask();
+  }
+}
+```
+
+**Pros:**
+- Automatic leader re-election
+- Clean abstraction
+
+**Cons:**
+- Additional library
+- More complex setup
+
+**4. Cron + Queue hybrid (recommended):**
+
+```typescript
+@Injectable()
+export class SchedulingService {
+  constructor(
+    @InjectQueue('tasks') private tasksQueue: Queue,
+    @InjectRedis() private redis: Redis,
+  ) {}
+
+  // ONE instance adds job to queue (use lock)
+  @Cron('0 2 * * *')
+  async scheduleCleanup() {
+    const lockKey = 'lock:schedule-cleanup';
+    const acquired = await this.redis.set(lockKey, '1', 'EX', 60, 'NX');
+    
+    if (acquired) {
+      // This instance won the race
+      await this.tasksQueue.add('daily-cleanup', {}, {
+        jobId: `cleanup-${new Date().toISOString().split('T')[0]}`,
+        attempts: 3,
+      });
+      
+      this.logger.log('Cleanup job queued');
+    }
+  }
+}
+
+// Processor on worker instances (Bull handles coordination)
+@Processor('tasks')
+export class TasksProcessor {
+  @Process('daily-cleanup')
+  async handleCleanup(job: Job) {
+    // Bull ensures single execution
+    await this.performCleanup();
+    return { success: true };
+  }
+}
+```
+
+**Pros:**
+- Separates scheduling from execution
+- Built-in retry, monitoring
+- Scalable workers
+
+**Cons:**
+- Requires Bull setup
+
+**5. External scheduler (enterprise):**
+
+```typescript
+// No cron in app code
+// AWS EventBridge → Lambda → API endpoint
+
+// api/jobs.controller.ts
+@Controller('jobs')
+export class JobsController {
+  @Post('daily-cleanup')
+  @Header('X-API-Key', process.env.JOBS_API_KEY)
+  async triggerCleanup() {
+    // Called by external scheduler (AWS EventBridge, Cloud Scheduler)
+    await this.cleanupService.performCleanup();
+    return { success: true };
+  }
+}
+
+// AWS EventBridge rule:
+// Schedule: cron(0 2 * * ? *)
+// Target: API Gateway → POST /jobs/daily-cleanup
+```
+
+**Pros:**
+- No job code in app
+- Managed service
+- Scales independently
+
+**Cons:**
+- Cloud vendor lock-in
+- External dependency
+
+**Instance-specific jobs (run everywhere):**
+
+```typescript
+@Injectable()
+export class InstanceJobsService {
+  // ✅ Run on ALL instances (no lock needed)
+  
+  @Cron('*/1 * * * *') // Every minute
+  async healthCheck() {
+    // Each instance checks its own health
+    const health = await this.checkInstanceHealth();
+    await this.metricsService.recordHealth(
+      process.env.INSTANCE_ID,
+      health
+    );
+  }
+
+  @Cron('0 * * * *') // Hourly
+  async refreshLocalCache() {
+    // Each instance refreshes its own in-memory cache
+    await this.cacheService.refresh();
+  }
+
+  @Cron('0 0 * * *') // Daily
+  async rotateLocalLogs() {
+    // Each instance rotates its own log files
+    await this.logService.rotate();
+  }
+}
+```
+
+**Decision matrix:**
+
+| Requirement | Solution |
+|-------------|----------|
+| Simple, can afford SPOF | Dedicated instance |
+| Need failover, have Redis | Distributed locks |
+| High availability | Leader election |
+| Heavy jobs, need monitoring | Cron + Queue |
+| Enterprise, managed | External scheduler |
+| Instance-specific | Run on all (no lock) |
+
+**Best practices:**
+
+- **Document which jobs run where:** Comment in code
+- **Monitor job execution:** Alert if jobs haven't run
+- **Health checks:** Ensure job instance is running
+- **Test failover:** Kill job instance, verify another takes over
+- **Use environment variables:** `RUN_JOBS=true` for configuration
+- **Separate concerns:** Scheduling vs execution
 
 </details>
 
 <details>
 <summary><strong>44. How do you use distributed locks to ensure single execution in multi-instance setups?</strong></summary>
 
-**Answer:**
+**Answer: Use Redlock algorithm for production-grade distributed locking**
 
-Use distributed locks with Redis-based Redlock algorithm: **1) Install Redlock** (`npm install redlock ioredis`), **2) Create Redlock client** connected to Redis, **3) Acquire lock** before job execution with TTL, **4) Execute job** only if lock acquired, **5) Release lock** in finally block, **6) Other instances** fail to acquire and skip execution. **Implementation steps**: Create RedisService with Redlock instance, inject in job service, acquire lock at start of `@Cron()` method, check if acquisition succeeded (null/error means another instance has lock), execute job logic only if locked, always release in finally block (prevents deadlock). **Example code pattern**: `const lock = await this.redlock.acquire(['locks:daily-cleanup'], 60000)` (acquire for 60 seconds), `if (!lock) { this.logger.log('Job already running on another instance'); return; }` (skip if locked elsewhere), execute job in try block, `finally { if (lock) await lock.release(); }` (release lock). **Redlock guarantees**: atomic lock acquisition (single instance gets lock), TTL auto-expiration (lock released even if instance crashes), multiple Redis instances supported (quorum-based for high availability), tested algorithm from Redis documentation. **Lock TTL considerations**: set TTL longer than expected job duration (if job takes 10 min, use 15 min TTL), if job exceeds TTL, lock expires and another instance can start (potential overlap), log warning if job approaches TTL limit, extend lock if needed (`await lock.extend(additionalMs)`). **Error handling**: wrap acquire in try-catch (Redis connection failure shouldn't crash app), if lock acquisition fails (network issue, Redis down), log error and skip execution gracefully, implement circuit breaker for repeated failures, alert if jobs consistently fail to acquire locks. **Alternative: Simple Redis SET NX**: simpler approach using Redis SET with NX (set if not exists) and EX (expiration): `const acquired = await redis.set('lock:jobName', 'locked', 'EX', 60, 'NX')` (returns 'OK' if acquired, null if exists), execute job if acquired === 'OK', delete key after completion: `await redis.del('lock:jobName')`, less reliable than Redlock (no quorum, single point of failure) but simpler for small deployments. **Multi-Redis setup**: for high availability, use Redis cluster or Sentinel, Redlock requires majority quorum (3 Redis instances, must acquire lock on 2+), protects against single Redis failure, configure Redlock with multiple Redis connections, increases reliability but also complexity and cost. **Testing**: mock Redlock in unit tests (return successful lock acquisition), integration tests with real Redis (test lock behavior, verify only one instance executes), test TTL expiration (job runs longer than TTL), test failover (first instance crashes, second acquires lock), load test with multiple instances (verify no duplicates). **Monitoring**: log lock acquisition attempts (success/failure), track lock hold duration (how long jobs hold locks), alert on frequent acquisition failures (Redis issues), monitor lock expiration without release (instance crashes during job). **Best practices**: always use finally block to release lock, set appropriate TTL (2-3x expected duration), implement lock extension for very long jobs, log which instance acquired lock (for debugging), use descriptive lock names (locks:daily-cleanup, locks:report-generation), consider idempotent operations (safe even if duplicate execution happens due to edge case).
+**Setup:**
 
-**Key Takeaway:** Install Redlock (`npm install redlock`), acquire lock before job execution (`const lock = await redlock.acquire(['locks:jobName'], ttlMs)`), execute only if lock acquired, release in finally block (`await lock.release()`). Set TTL longer than job duration. Other instances fail to acquire and skip execution. Ensures single execution across multiple instances.
+```bash
+npm install redlock ioredis
+npm install --save-dev @types/redlock
+```
+
+**1. Create lock service:**
+
+```typescript
+// locks/locks.service.ts
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import Redlock from 'redlock';
+import Redis from 'ioredis';
+
+@Injectable()
+export class LocksService implements OnModuleInit, OnModuleDestroy {
+  private redlock: Redlock;
+  private redis: Redis;
+
+  async onModuleInit() {
+    // Connect to Redis (or Redis cluster)
+    this.redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT) || 6379,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+    });
+
+    // Create Redlock instance
+    this.redlock = new Redlock(
+      [this.redis], // For HA, pass multiple Redis clients
+      {
+        driftFactor: 0.01,
+        retryCount: 0, // Don't retry (for scheduled jobs, skip if locked)
+        retryDelay: 200,
+        retryJitter: 200,
+      }
+    );
+
+    // Listen to events
+    this.redlock.on('error', (error) => {
+      console.error('Redlock error:', error);
+    });
+  }
+
+  async onModuleDestroy() {
+    await this.redis.quit();
+  }
+
+  /**
+   * Acquire distributed lock
+   * @param resource Lock key (e.g., 'locks:daily-cleanup')
+   * @param ttl Time-to-live in milliseconds (lock auto-expires)
+   * @returns Lock object or null if unavailable
+   */
+  async acquire(resource: string, ttl: number) {
+    try {
+      return await this.redlock.acquire([resource], ttl);
+    } catch (error) {
+      // Lock is held by another instance
+      if (error.name === 'LockError') {
+        return null;
+      }
+      throw error; // Rethrow if it's not a lock error
+    }
+  }
+}
+```
+
+**2. Use lock in scheduled job:**
+
+```typescript
+// tasks/tasks.service.ts
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { LocksService } from '../locks/locks.service';
+
+@Injectable()
+export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
+  constructor(private locksService: LocksService) {}
+
+  // Runs on ALL instances, but only one executes
+  @Cron('0 2 * * *') // Daily at 2 AM
+  async dailyCleanup() {
+    const lockKey = 'locks:daily-cleanup';
+    const lockTTL = 60 * 60 * 1000; // 1 hour (job takes ~30 min)
+    
+    let lock = null;
+    
+    try {
+      // Try to acquire lock
+      lock = await this.locksService.acquire(lockKey, lockTTL);
+      
+      if (!lock) {
+        // Another instance is running this job
+        this.logger.log('Lock held by another instance, skipping');
+        return;
+      }
+
+      // This instance acquired the lock
+      this.logger.log(`Acquired lock, instance ${process.env.INSTANCE_ID} executing`);
+      
+      // Execute job
+      await this.performCleanup();
+      
+      this.logger.log('Cleanup completed successfully');
+      
+    } catch (error) {
+      this.logger.error('Cleanup failed', error);
+      throw error;
+      
+    } finally {
+      // Always release lock
+      if (lock) {
+        try {
+          await lock.release();
+          this.logger.log('Lock released');
+        } catch (releaseError) {
+          this.logger.error('Failed to release lock', releaseError);
+        }
+      }
+    }
+  }
+
+  private async performCleanup() {
+    // Actual cleanup logic
+    await this.deleteOldRecords();
+    await this.archiveInactiveUsers();
+    // ... more cleanup tasks
+  }
+}
+```
+
+**3. Lock TTL calculation:**
+
+```typescript
+// Set TTL to 2-3x expected job duration
+const estimatedDuration = 30 * 60 * 1000; // 30 minutes
+const lockTTL = estimatedDuration * 3;     // 90 minutes (buffer)
+
+// Why? Prevents deadlock if instance crashes:
+// - Job starts at 2:00 AM
+// - Instance crashes at 2:10 AM
+// - Lock auto-expires at 3:30 AM (TTL)
+// - Next day at 2:00 AM, job can run again
+
+// Don't set too long (blocks next execution if needed)
+// Don't set too short (lock expires while job still running)
+```
+
+**4. Lock extension for long jobs:**
+
+```typescript
+@Cron('0 3 * * *')
+async longRunningJob() {
+  const lockKey = 'locks:long-job';
+  const lockTTL = 10 * 60 * 1000; // 10 minutes initial
+  
+  let lock = await this.locksService.acquire(lockKey, lockTTL);
+  if (!lock) return;
+
+  try {
+    for (let i = 0; i < 100; i++) {
+      await this.processBatch(i);
+      
+      // Extend lock every 5 minutes
+      if (i % 10 === 0 && lock) {
+        lock = await lock.extend(10 * 60 * 1000);
+        this.logger.log('Lock extended');
+      }
+    }
+  } finally {
+    if (lock) await lock.release();
+  }
+}
+```
+
+**5. Simple Redis flag alternative (no library):**
+
+```typescript
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
+
+@Injectable()
+export class SimpleLocksService {
+  constructor(@InjectRedis() private redis: Redis) {}
+
+  @Cron('0 2 * * *')
+  async dailyCleanup() {
+    const lockKey = 'lock:daily-cleanup';
+    const lockTTL = 3600; // 1 hour in seconds
+    
+    // SET NX (set if not exists) EX (expiry)
+    const acquired = await this.redis.set(
+      lockKey,
+      process.env.INSTANCE_ID || '1',
+      'EX', lockTTL,
+      'NX'
+    );
+
+    if (!acquired) {
+      // Another instance has lock
+      this.logger.log('Lock held, skipping');
+      return;
+    }
+
+    try {
+      // This instance acquired lock
+      await this.performCleanup();
+      
+    } finally {
+      // Release lock
+      await this.redis.del(lockKey);
+    }
+  }
+}
+```
+
+**6. Database lock alternative:**
+
+```typescript
+// migrations/xxx-create-job-locks.ts
+export class CreateJobLocks {
+  async up(queryRunner: QueryRunner) {
+    await queryRunner.query(`
+      CREATE TABLE job_locks (
+        job_name VARCHAR(255) PRIMARY KEY,
+        is_running BOOLEAN NOT NULL DEFAULT FALSE,
+        locked_at TIMESTAMP,
+        locked_by VARCHAR(255),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  }
+}
+
+// tasks.service.ts
+@Cron('0 2 * * *')
+async dailyCleanup() {
+  const lockAcquired = await this.dataSource.transaction(async (manager) => {
+    // Atomic update
+    const result = await manager.query(`
+      UPDATE job_locks
+      SET is_running = TRUE,
+          locked_at = NOW(),
+          locked_by = $1
+      WHERE job_name = $2 AND is_running = FALSE
+      RETURNING job_name
+    `, [process.env.INSTANCE_ID, 'daily-cleanup']);
+
+    return result.length > 0;
+  });
+
+  if (!lockAcquired) {
+    this.logger.log('Job already running on another instance');
+    return;
+  }
+
+  try {
+    await this.performCleanup();
+    
+  } finally {
+    // Release lock
+    await this.dataSource.query(`
+      UPDATE job_locks
+      SET is_running = FALSE,
+          locked_at = NULL,
+          locked_by = NULL
+      WHERE job_name = $1
+    `, ['daily-cleanup']);
+  }
+}
+```
+
+**7. Monitor lock duration:**
+
+```typescript
+@Cron('0 2 * * *')
+async dailyCleanup() {
+  const startTime = Date.now();
+  let lock = null;
+
+  try {
+    lock = await this.locksService.acquire('locks:cleanup', 60 * 60 * 1000);
+    if (!lock) return;
+
+    await this.performCleanup();
+    
+    // Measure duration
+    const duration = Date.now() - startTime;
+    await this.metricsService.recordJobDuration('daily-cleanup', duration);
+    
+    // Alert if exceeding threshold
+    if (duration > 30 * 60 * 1000) { // > 30 minutes
+      this.logger.warn(`Job took ${duration}ms, approaching lock TTL`);
+      await this.alertService.notify('Cleanup job running slow');
+    }
+    
+  } finally {
+    if (lock) await lock.release();
+  }
+}
+```
+
+**Comparison:**
+
+| Approach | Pros | Cons | Use Case |
+|----------|------|------|----------|
+| **Redlock** | Production-grade, atomic, HA-ready | Requires Redis | Enterprise apps |
+| **Simple Redis** | Easy, no library | No lock extension | Most apps |
+| **Database** | No Redis needed, transactional | DB overhead | Small scale |
+| **Bull Queue** | Built-in, retry, monitoring | Queue complexity | Heavy jobs |
+
+**Best practices:**
+
+- **Set TTL to 2-3x job duration:** Prevents deadlock if instance crashes
+- **Always release in finally block:** Avoid lock leaks
+- **Log lock events:** Acquisition, release, failures (for debugging)
+- **Monitor lock metrics:** Wait times, failures, duration
+- **Test multi-instance locally:** Docker Compose with 3 instances
+- **Handle lock failures gracefully:** Log and skip (don't throw error)
+- **Use descriptive lock keys:** `locks:daily-cleanup` not just `cleanup`
+- **Consider lock extension:** For jobs > 10 minutes
+- **Set up alerts:** If job hasn't run in expected window
+- **Prefer Bull queues for heavy jobs:** Better coordination and monitoring
+
+**Testing:**
+
+```typescript
+describe('TasksService with locks', () => {
+  let service: TasksService;
+  let locksService: LocksService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        TasksService,
+        {
+          provide: LocksService,
+          useValue: {
+            acquire: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get(TasksService);
+    locksService = module.get(LocksService);
+  });
+
+  it('should execute job when lock acquired', async () => {
+    const mockLock = { release: jest.fn() };
+    jest.spyOn(locksService, 'acquire').mockResolvedValue(mockLock);
+
+    await service.dailyCleanup();
+
+    expect(locksService.acquire).toHaveBeenCalledWith('locks:daily-cleanup', expect.any(Number));
+    expect(mockLock.release).toHaveBeenCalled();
+  });
+
+  it('should skip job when lock unavailable', async () => {
+    jest.spyOn(locksService, 'acquire').mockResolvedValue(null);
+
+    await service.dailyCleanup();
+
+    // Job skipped, no error thrown
+    expect(locksService.acquire).toHaveBeenCalled();
+  });
+});
+```
 
 </details>
 
 <details>
-<summary><strong>45. What are the performance implications of many scheduled jobs?</strong></summary>
+<summary><strong>45. What are the performance implications of having many scheduled jobs?</strong></summary>
 
-**Answer:**
+**Answer: Multiple performance impacts - memory, CPU, connections, event loop**
 
-Many scheduled jobs can impact performance: **1) Memory overhead** (each job stored in scheduler), **2) CPU cycles** (scheduler checks triggers frequently), **3) Thread pool usage** (jobs run on Node.js event loop), **4) Database connections** (each job might open connection), **5) Resource contention** (multiple jobs competing for CPU/memory/DB). **Memory impact**: each cron job creates CronJob instance with state (schedule, callback, status), 100 jobs ≈ few MB memory (minimal), more significant for interval/timeout jobs with active timers, dynamic jobs (SchedulerRegistry) increase memory linearly with count, monitor memory usage with many jobs (heap size, GC pauses). **CPU impact**: scheduler evaluates job triggers continuously (checking if time to execute), more jobs = more evaluation overhead, typically negligible for <100 jobs, beyond 1000 jobs might see measurable CPU usage just for scheduling (not execution), consider moving to external scheduler (Bull, AWS EventBridge) for very high counts. **Execution overlap**: if many jobs trigger simultaneously (example: 50 jobs at `'0 * * * *'` every hour), all execute concurrently on Node.js event loop, can block event loop (hurt API response times), exhaust database connections (connection pool limit reached), cause memory spikes (all jobs allocating memory simultaneously), **mitigation**: stagger job times (`'0 * * * *'`, `'5 * * * *'`, `'10 * * * *'`), use queues with controlled concurrency, dedicated worker process for jobs. **Database connection exhaustion**: each concurrent job uses database connection, 50 concurrent jobs × 1 connection = 50 connections needed, exceeds typical pool size (10-20 connections), causes "too many connections" errors, **mitigation**: increase pool size, use connection pooling properly, stagger jobs to reduce concurrency, jobs release connections quickly (don't hold open). **Event loop blocking**: CPU-intensive jobs (data processing, encryption) block Node.js event loop, causes API slowdown (requests wait for event loop), **mitigation**: offload CPU work to worker threads or separate process, use queues with separate workers for heavy jobs, keep jobs I/O-bound (database, API calls) not CPU-bound. **Best practices for many jobs**: **stagger execution** (spread jobs across time, not all at top of hour), **use queues** for heavy/frequent jobs (Bull with workers), **dedicated job instance** (separate from API servers, isolate resource usage), **monitor resource usage** (CPU, memory, connections when jobs run), **limit concurrency** (Bull concurrency option, control simultaneous executions), **batch operations** (instead of 100 jobs each processing 1 record, 1 job processing 100 records in batches), **consider external schedulers** (AWS EventBridge, Cloud Scheduler for very high counts >1000 jobs), **optimize job logic** (efficient queries, connection reuse, minimal memory allocation). **When to use alternatives**: >100 frequent jobs (every minute) → consider Bull queues instead of cron, >1000 jobs total → external scheduler (EventBridge) + Lambda/API trigger, user-specific jobs (1 per user, millions) → event-driven queue system not cron, very high frequency (every second) → interval jobs or queues not cron. **Monitoring metrics**: track active job count, measure scheduler overhead (CPU% from scheduler itself), monitor job execution duration and overlap, alert on resource exhaustion (connections, memory, CPU), measure API response time impact during job execution.
+**1. Memory overhead:**
 
-**Key Takeaway:** Many scheduled jobs (>100 frequent, >1000 total) cause memory overhead (each job instance), CPU usage (scheduler checks), execution overlap (all trigger simultaneously), connection exhaustion. Mitigate by: stagger job times, use Bull queues with concurrency control, dedicated worker instances, optimize job logic, consider external schedulers (EventBridge) for >1000 jobs, monitor resource usage.
+```typescript
+// Each scheduled job stores metadata in memory
+@Cron('0 * * * *')  // Stores: cron expression, callback, context
+async hourlyJob() {}
+
+@Interval(5000)     // Stores: interval ID, callback, context
+async periodicJob() {}
+
+// Impact:
+// - 10 jobs: ~100 KB (negligible)
+// - 100 jobs: ~1-2 MB (acceptable)
+// - 1000 jobs: ~10-20 MB (noticeable)
+// - 10,000 jobs: ~100-200 MB (significant)
+
+// Monitor with:
+process.memoryUsage().heapUsed / 1024 / 1024; // MB
+```
+
+**2. CPU overhead:**
+
+```typescript
+// Cron expressions evaluated every second
+@Cron('0 2 * * *')  // Checks every second: "Is it 2 AM?"
+async dailyJob() {}
+
+// With 100 jobs:
+// - 100 expression evaluations per second
+// - Usually fast (<1ms each) but adds up
+// - ~100ms CPU time per second at 100 jobs
+
+// Interval jobs fire callbacks:
+@Interval(1000)     // Callback fires every second
+async everySecond() {
+  // Uses CPU every execution
+}
+
+// Impact grows with:
+// - Number of jobs
+// - Frequency (more frequent = more CPU)
+// - Job duration (longer jobs = more concurrent executions)
+```
+
+**3. Execution overlap (major issue):**
+
+```typescript
+// Problem: Job takes 2 minutes, but runs every 1 minute
+@Cron('*/1 * * * *')  // Every minute
+async slowJob() {
+  await this.processLargeDataset(); // Takes 2 minutes
+  // Next execution starts before this finishes!
+  // Result: 2 instances running concurrently (2x memory/CPU)
+}
+
+// Solution: Skip if already running
+@Injectable()
+export class TasksService {
+  private isRunning = false;
+
+  @Cron('*/1 * * * *')
+  async slowJob() {
+    if (this.isRunning) {
+      this.logger.warn('Job still running, skipping this execution');
+      return;
+    }
+
+    this.isRunning = true;
+    try {
+      await this.processLargeDataset();
+    } finally {
+      this.isRunning = false; // Always reset
+    }
+  }
+}
+
+// Advanced: Track per-job state
+private runningJobs = new Map<string, boolean>();
+
+@Cron('*/1 * * * *')
+async job1() {
+  return this.runIfNotRunning('job1', async () => {
+    await this.process();
+  });
+}
+
+private async runIfNotRunning(jobName: string, fn: () => Promise<void>) {
+  if (this.runningJobs.get(jobName)) {
+    this.logger.warn(`${jobName} still running, skipping`);
+    return;
+  }
+
+  this.runningJobs.set(jobName, true);
+  try {
+    await fn();
+  } finally {
+    this.runningJobs.set(jobName, false);
+  }
+}
+```
+
+**4. Event loop blocking:**
+
+```typescript
+// CPU-intensive job blocks event loop
+@Cron('0 * * * *')
+async heavyComputation() {
+  // Synchronous loop blocks Node.js event loop
+  for (let i = 0; i < 1000000000; i++) {
+    // Complex calculation
+  }
+  // While running: API requests hang, other jobs delayed
+}
+
+// Solution: Use worker threads
+import { Worker } from 'worker_threads';
+
+@Cron('0 * * * *')
+async heavyComputation() {
+  const worker = new Worker('./workers/computation.worker.js');
+  
+  worker.on('message', (result) => {
+    this.logger.log('Computation done:', result);
+  });
+  
+  worker.on('error', (error) => {
+    this.logger.error('Worker error:', error);
+  });
+  
+  // Main thread remains responsive
+}
+
+// Or: Use Bull queue (better)
+@Cron('0 * * * *')
+async scheduleHeavyJob() {
+  // Just add to queue (non-blocking)
+  await this.queue.add('heavy-computation', {});
+}
+```
+
+**5. Database connection exhaustion:**
+
+```typescript
+// Problem: 50 jobs running concurrently, each queries DB
+@Cron('*/1 * * * *')
+async job1() { await this.db.query(...); } // Connection 1
+
+@Cron('*/1 * * * *')
+async job2() { await this.db.query(...); } // Connection 2
+
+// ... 48 more jobs
+
+// If pool size = 20:
+// ERROR: "Connection pool exhausted"
+
+// Solution 1: Increase pool size
+// typeorm config
+TypeOrmModule.forRoot({
+  type: 'postgres',
+  extra: {
+    max: 100, // Increase from default 10
+    connectionTimeoutMillis: 5000,
+  },
+});
+
+// Solution 2: Stagger jobs
+@Cron('0 * * * *')   // Job 1 at :00
+async job1() {}
+
+@Cron('5 * * * *')   // Job 2 at :05
+async job2() {}
+
+@Cron('10 * * * *')  // Job 3 at :10
+async job3() {}
+
+// Solution 3: Use Bull queue (controls concurrency)
+@Processor('tasks')
+export class TasksProcessor {
+  @Process({ name: 'db-query', concurrency: 5 }) // Max 5 at once
+  async handleQuery(job: Job) {
+    await this.db.query(...);
+  }
+}
+```
+
+**6. Mitigation strategies:**
+
+```typescript
+// Strategy 1: Stagger schedules (avoid peaks)
+// ❌ Bad: All at midnight (50 jobs fire simultaneously)
+@Cron('0 0 * * *') async job1() {}
+@Cron('0 0 * * *') async job2() {}
+// ... 48 more at 00:00
+
+// ✅ Good: Spread throughout hour
+@Cron('0 0 * * *')  async job1() {}  // 00:00
+@Cron('5 0 * * *')  async job2() {}  // 00:05
+@Cron('10 0 * * *') async job3() {}  // 00:10
+@Cron('15 0 * * *') async job4() {}  // 00:15
+
+// Strategy 2: Use Bull for >100 jobs
+@Injectable()
+export class SchedulingService {
+  // ONE cron job schedules all others
+  @Cron('0 0 * * *')
+  async scheduleDailyJobs() {
+    // Add 100 jobs to queue (staggered automatically)
+    for (const task of this.dailyTasks) {
+      await this.queue.add(task.name, task.data, {
+        delay: task.delay, // Stagger: 0ms, 5000ms, 10000ms, ...
+      });
+    }
+  }
+}
+
+// Workers process with controlled concurrency
+@Processor('tasks')
+export class TasksProcessor {
+  @Process({ concurrency: 10 }) // Only 10 jobs at once
+  async process(job: Job) {
+    // Actual job logic
+  }
+}
+
+// Strategy 3: Monitor metrics
+@Injectable()
+export class MonitoredTasksService {
+  @Cron('0 * * * *')
+  async hourlyJob() {
+    const startTime = Date.now();
+    const startMem = process.memoryUsage().heapUsed;
+
+    try {
+      await this.doWork();
+      
+      const duration = Date.now() - startTime;
+      const memUsed = process.memoryUsage().heapUsed - startMem;
+      
+      // Record metrics
+      await this.metrics.record('hourly_job', {
+        duration,
+        memory: memUsed / 1024 / 1024, // MB
+      });
+      
+      // Alert if threshold exceeded
+      if (duration > 30000) { // > 30 seconds
+        this.logger.warn(`Job took ${duration}ms`);
+      }
+      
+    } catch (error) {
+      this.logger.error('Job failed', error);
+      await this.alerts.notify('hourly_job_failed');
+    }
+  }
+}
+```
+
+**7. When to use alternatives:**
+
+```typescript
+// <50 jobs: @Cron is fine
+@Cron('0 * * * *') async job1() {}
+@Cron('0 2 * * *') async job2() {}
+
+// 50-100 jobs: Still OK, but monitor
+// - Stagger schedules
+// - Implement skip-if-running
+// - Monitor metrics
+
+// >100 jobs: Use Bull
+// - Better coordination
+// - Built-in retry/monitoring
+// - Controlled concurrency
+await this.queue.add('task', {});
+
+// >1000 jobs: External scheduler
+// - AWS EventBridge → Lambda → API
+// - Cloud Scheduler → Cloud Run → API
+// - Separate job service
+// Removes load from main app
+```
+
+**Benchmarks:**
+
+| Job Count | Memory | CPU | DB Connections | Recommendation |
+|-----------|--------|-----|----------------|----------------|
+| 1-50 | <1 MB | <5% | <10 | ✅ Use @Cron |
+| 50-100 | 1-2 MB | 5-10% | 10-20 | ⚠️ @Cron + monitoring |
+| 100-500 | 5-20 MB | 10-25% | 20-50 | ⚠️ Consider Bull |
+| 500-1000 | 20-50 MB | 25-50% | 50-100 | ❌ Use Bull |
+| >1000 | >50 MB | >50% | >100 | ❌ External scheduler |
+
+**Warning signs:**
+
+```bash
+# High memory usage
+> process.memoryUsage()
+{ heapUsed: 200000000 }  # 200 MB (unusual for just jobs)
+
+# Slow API responses
+> curl /api/health
+# Takes 5+ seconds (event loop blocked by jobs)
+
+# Connection pool errors
+ERROR: Connection pool exhausted
+All connections are in use
+
+# Jobs missing schedules
+# Expected to run at 2:00 AM, but ran at 2:05 AM
+# (event loop too busy)
+
+# CPU spikes
+# CPU jumps to 100% every hour when jobs fire
+```
+
+**Best practices:**
+
+- **Start small:** Test with 5 jobs in dev, gradually increase to production load
+- **Use Bull for >100 jobs:** Better coordination and monitoring
+- **Stagger schedules:** Avoid all jobs at midnight/top of hour
+- **Implement skip-if-running:** Prevents overlap
+- **Monitor metrics:** Track duration, memory, CPU, DB connections
+- **Use worker threads for CPU-intensive:** Keeps main thread responsive
+- **Increase DB pool size:** Match concurrent job count
+- **Set up alerts:** If jobs don't run or take too long
+- **Test realistic load:** Don't just test with 5 jobs
+- **Consider external schedulers:** For >1000 jobs
 
 </details>
 

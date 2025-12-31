@@ -9570,7 +9570,6 @@ export class DryRunCleanupService {
 
 </details>
 
-18. How do you implement data cleanup jobs?
 
 <details>
 <summary><strong>19. How do you send scheduled email notifications?</strong></summary>
@@ -9664,7 +9663,6 @@ Create a queue processor by: **1) Create service** with `@Processor('queueName')
 
 </details>
 
-26. How do you create a queue processor?
 
 <details>
 <summary><strong>27. How do you add jobs to a queue?</strong></summary>
@@ -9782,8 +9780,6 @@ Monitor scheduled jobs through: **1) Bull Board** (web UI for queue monitoring),
 
 </details>
 
-37. How do you log job execution?
-38. How do you handle long-running jobs?
 
 <details>
 <summary><strong>37. How do you log job execution?</strong></summary>
@@ -9853,9 +9849,6 @@ Prevent job overlapping using: **1) Check if job still running** before starting
 
 </details>
 
-43. Should you run scheduled jobs in production on all instances?
-44. How do you use distributed locks to ensure single execution in multi-instance setups?
-45. What are the performance implications of many scheduled jobs?
 
 <details>
 <summary><strong>43. Should you run scheduled jobs in production on all instances?</strong></summary>

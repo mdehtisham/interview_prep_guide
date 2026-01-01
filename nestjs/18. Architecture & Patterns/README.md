@@ -7,7 +7,14 @@
 
 **Answer:**
 
-NestJS recommends a **layered (n-tier) architecture** based on **separation of concerns**, where each layer has a specific responsibility. The typical layers are: **Presentation (Controllers)**, **Business Logic (Services)**, **Data Access (Repositories)**, and **Domain (Entities/Models)**. This architecture promotes **maintainability**, **testability**, and **scalability**.
+- NestJS recommends a **layered (n-tier) architecture** based on **separation of concerns**
+- Each layer has a specific responsibility
+- The typical layers are:
+  - **Presentation (Controllers)**
+  - **Business Logic (Services)**
+  - **Data Access (Repositories)**
+  - **Domain (Entities/Models)**
+- This architecture promotes **maintainability**, **testability**, and **scalability**
 
 ---
 
@@ -643,7 +650,15 @@ export class UserController {
 }
 ```
 
-**Key Takeaway:** NestJS recommends **layered architecture** with clear separation: **Controllers** handle HTTP (routing, validation, responses), **Services** contain business logic (rules, orchestration, calculations), **Repositories** manage data access (queries, persistence), and **Entities** represent domain models (data structure, domain logic). Each layer has **single responsibility**, depends only on layers below, and can be tested independently. This promotes **maintainability**, **testability**, **scalability**, and **reusability**.
+**Key Takeaway:**
+
+- NestJS recommends **layered architecture** with clear separation:
+  - **Controllers** handle HTTP (routing, validation, responses)
+  - **Services** contain business logic (rules, orchestration, calculations)
+  - **Repositories** manage data access (queries, persistence)
+  - **Entities** represent domain models (data structure, domain logic)
+- Each layer has **single responsibility**, depends only on layers below, and can be tested independently
+- This promotes **maintainability**, **testability**, **scalability**, and **reusability**
 
 </details>
 
@@ -1399,7 +1414,15 @@ const mockService = { create: jest.fn() };
 const controller = new UserController(mockService as any);
 ```
 
-**Key Takeaway:** The typical layers in NestJS are: **Controller** (HTTP routing, validation, response formatting), **Service** (business logic, rules, orchestration), **Repository** (data access, queries, persistence), and **Entity** (data models, domain logic). Each layer has **single responsibility**, depends only on layers below, communicates through well-defined interfaces, and can be tested independently. **Controllers** handle HTTP, **Services** handle business logic, **Repositories** handle data, and **Entities** represent domain models.
+**Key Takeaway:**
+
+- The typical layers in NestJS are:
+  - **Controller** (HTTP routing, validation, response formatting)
+  - **Service** (business logic, rules, orchestration)
+  - **Repository** (data access, queries, persistence)
+  - **Entity** (data models, domain logic)
+- Each layer has **single responsibility**, depends only on layers below, communicates through well-defined interfaces, and can be tested independently
+- **Controllers** handle HTTP, **Services** handle business logic, **Repositories** handle data, and **Entities** represent domain models
 
 </details>
 
@@ -1408,7 +1431,13 @@ const controller = new UserController(mockService as any);
 
 **Answer:**
 
-**Separation of Concerns (SoC)** is a design principle where different parts of an application are divided based on their specific functionality or concern. In NestJS, this means **Controllers handle HTTP**, **Services handle business logic**, **Repositories handle data access**, and **Entities represent domain models**. Each component has a **single, well-defined responsibility** and doesn't mix concerns from other layers.
+- **Separation of Concerns (SoC)** is a design principle where different parts of an application are divided based on their specific functionality or concern
+- In NestJS, this means:
+  - **Controllers handle HTTP**
+  - **Services handle business logic**
+  - **Repositories handle data access**
+  - **Entities represent domain models**
+- Each component has a **single, well-defined responsibility** and doesn't mix concerns from other layers
 
 ---
 
@@ -2152,7 +2181,17 @@ class UserService {
 }
 ```
 
-**Key Takeaway:** **Separation of Concerns (SoC)** means dividing code by specific responsibilities: **Controllers** handle HTTP requests/responses, **Services** contain business logic and orchestration, **Repositories** manage data access, **Entities** represent domain models, **DTOs** handle validation, and **shared services** handle cross-cutting concerns (logging, auth, email). Each component has **one clear responsibility**, making the code **testable**, **maintainable**, **reusable**, and **scalable**. Changes to one concern don't affect others.
+**Key Takeaway:**
+
+- **Separation of Concerns (SoC)** means dividing code by specific responsibilities:
+  - **Controllers** handle HTTP requests/responses
+  - **Services** contain business logic and orchestration
+  - **Repositories** manage data access
+  - **Entities** represent domain models
+  - **DTOs** handle validation
+  - **Shared services** handle cross-cutting concerns (logging, auth, email)
+- Each component has **one clear responsibility**, making the code **testable**, **maintainable**, **reusable**, and **scalable**
+- Changes to one concern don't affect others
 
 </details>
 
@@ -2161,7 +2200,9 @@ class UserService {
 
 **Answer:**
 
-**Dependency Injection (DI)** is a design pattern where a class receives its dependencies from external sources rather than creating them itself. In NestJS, the **IoC (Inversion of Control) container** automatically creates and injects dependencies. DI is important because it promotes **loose coupling**, **testability**, **reusability**, and makes code **easier to maintain** and **change**.
+- **Dependency Injection (DI)**: Design pattern where a class receives its dependencies from external sources rather than creating them itself
+- **NestJS Implementation**: **IoC container** automatically creates and injects dependencies  
+- **Importance**: Promotes **loose coupling**, **testability**, **reusability**, and makes code **easier to maintain** and **change**
 
 ---
 
@@ -2751,7 +2792,11 @@ const mockRepo = { save: jest.fn() };
 const service = new UserService(mockRepo);
 ```
 
-**Key Takeaway:** **Dependency Injection (DI)** is a pattern where classes receive dependencies from external sources (NestJS IoC container) rather than creating them. DI enables **loose coupling** (classes don't know how dependencies are created), **testability** (easy to inject mocks), **reusability** (NestJS manages instances), **flexibility** (swap implementations easily), and **maintainability** (clear dependency declarations). Use **constructor injection** with **readonly** modifiers, depend on **abstractions** (interfaces) not concrete classes, and leverage NestJS's IoC container for automatic dependency resolution and lifecycle management.
+**Key Takeaway:**
+
+- **Dependency Injection (DI)**: Pattern where classes receive dependencies from external sources (NestJS IoC container) rather than creating them
+- **Benefits**: Enables **loose coupling**, **testability**, **reusability**, **flexibility**, and **maintainability**
+- **Best Practices**: Use **constructor injection** with **readonly** modifiers, depend on **abstractions** (interfaces) not concrete classes, leverage NestJS's IoC container for automatic dependency resolution and lifecycle management
 
 </details>
 
@@ -2762,7 +2807,9 @@ const service = new UserService(mockRepo);
 
 **Answer:**
 
-A **Module** in NestJS is a class decorated with `@Module()` that organizes application structure by grouping related components (controllers, services, providers). Modules use **metadata** to define: **providers** (services to instantiate), **controllers** (routes to register), **imports** (other modules to use), and **exports** (providers to share). Modules enable **encapsulation**, **reusability**, and **lazy loading**.
+- **Module Definition**: Class decorated with `@Module()` that organizes application structure by grouping related components (controllers, services, providers)
+- **Metadata**: Uses metadata to define **providers** (services to instantiate), **controllers** (routes to register), **imports** (other modules to use), and **exports** (providers to share)
+- **Benefits**: Enables **encapsulation**, **reusability**, and **lazy loading**
 
 ---
 
@@ -3360,7 +3407,12 @@ src/
 └── all-features.module.ts  // One huge module
 ```
 
-**Key Takeaway:** A **Module** in NestJS is a class with `@Module()` decorator that groups related components (controllers, services, providers). Modules define **imports** (dependencies from other modules), **providers** (services to instantiate), **controllers** (HTTP handlers), and **exports** (providers to share). Modules enable **encapsulation** (group related code), **reusability** (import modules), **dependency management** (clear imports), and **lazy loading**. Use **feature modules** for domains, **shared modules** for common utilities, **dynamic modules** for configuration, and **@Global()** sparingly for truly global services.
+**Key Takeaway:**
+
+- **Module Definition**: Class with `@Module()` decorator that groups related components (controllers, services, providers)
+- **Metadata Properties**: Define **imports** (dependencies from other modules), **providers** (services to instantiate), **controllers** (HTTP handlers), and **exports** (providers to share)
+- **Benefits**: Enable **encapsulation** (group related code), **reusability** (import modules), **dependency management** (clear imports), and **lazy loading**
+- **Best Practices**: Use **feature modules** for domains, **shared modules** for common utilities, **dynamic modules** for configuration, and **@Global()** sparingly for truly global services
 
 </details>
 
@@ -3369,7 +3421,13 @@ src/
 
 **Answer:**
 
-Organize code into modules using **feature-based modularization** where each module represents a **business domain** or **bounded context**. Structure: **one module per feature** (UserModule, OrderModule, ProductModule), **shared modules** for cross-cutting concerns (AuthModule, LoggerModule, DatabaseModule), and **core module** for application-wide services. Use **clear naming**, **encapsulation**, and **single responsibility** principle.
+Organize code into modules using **feature-based modularization**:
+
+- **Purpose**: Each module represents a **business domain** or **bounded context**
+- **Structure**: One module per feature (e.g., UserModule, OrderModule, ProductModule)
+- **Shared modules**: Place cross-cutting concerns in shared modules (e.g., AuthModule, LoggerModule, DatabaseModule)
+- **Core module**: Keep application-wide infrastructure (config, database, cache) in a core module
+- **Guidelines**: Use clear naming, enforce encapsulation, and follow the Single Responsibility Principle
 
 ---
 
@@ -3972,7 +4030,13 @@ order/orders.mod.ts
 product/prod.module.ts
 ```
 
-**Key Takeaway:** Organize code into modules using **feature-based modularization**: one module per **business domain** (UserModule, OrderModule), **shared modules** for cross-cutting concerns (LoggerService, EmailService), and **core module** for infrastructure (database, config, cache). Structure each module with: **controllers/** (HTTP), **services/** (business logic), **repositories/** (data access), **entities/** (domain models), **dto/** (validation). Use **clear imports** to define dependencies, **export only public APIs**, avoid **circular dependencies**, and follow **Single Responsibility Principle**. For large apps, consider **DDD-style** (bounded contexts) or **monorepo** (multiple apps + shared libs).
+**Key Takeaway:**
+
+- **Modularization Approach:** Use **feature-based modularization** — one module per business domain (e.g., `UserModule`, `OrderModule`)
+- **Shared & Core Modules:** Put cross-cutting concerns in **shared modules** (e.g., LoggerService, EmailService) and infrastructure in a **core module** (database, config, cache)
+- **Module Structure:** Each feature module should contain `controllers/` (HTTP), `services/` (business logic), `repositories/` (data access), `entities/` (domain models), and `dto/` (validation)
+- **Guidelines:** Use clear imports to express dependencies, export only public APIs, avoid circular dependencies, and follow the Single Responsibility Principle
+- **Scale Options:** For large systems, consider **DDD-style** bounded contexts or a **monorepo** (multiple apps + shared libs)
 
 </details>
 
@@ -3981,7 +4045,11 @@ product/prod.module.ts
 
 **Answer:**
 
-**Feature-based modularization** is organizing code by **business features** or **domains** rather than technical layers. Each module contains all related components (controllers, services, repositories, entities, DTOs) for one feature. Example: **UserModule** has user controller, user service, user repository. Benefits: **high cohesion**, **low coupling**, **easier to find code**, **independent deployment**, and **team autonomy**.
+**Feature-based modularization**: organize code by **business features** or **domains** (instead of technical layers).
+
+- **Structure:** each feature/module groups its controllers, services, repositories, entities, and DTOs (e.g., `UserModule` → user controller, user service, user repository).
+- **Benefits:** **high cohesion**, **low coupling**, easier to locate code, supports independent deployment, and enables team autonomy.
+- **When to use:** preferred for most applications — simplifies testing, scaling, and later refactor to microservices.
 
 ---
 
@@ -4632,7 +4700,12 @@ export class UsersModule {}
 // Need to delete from controllers/, services/, repositories/, entities/
 ```
 
-**Key Takeaway:** **Feature-based modularization** organizes code by **business features** (users, orders, products) rather than technical layers (controllers, services). Each feature has its own **module** containing all related components: controllers, services, repositories, entities, DTOs. Benefits: **high cohesion** (related code together), **low coupling** (clear dependencies), **easy navigation** (all code in one folder), **team autonomy** (one team per feature), **independent testing** and **deployment**, and **easy refactoring** to microservices. Use **one module per feature**, **explicit imports** for dependencies, and **export only public APIs**.
+**Key Takeaway:** Feature-based modularization (by business feature/domain)
+
+- **What:** Organize code by features (e.g., users, orders, products) instead of by technical layer.
+- **Module contents:** each feature/module holds controllers, services, repositories, entities, and DTOs.
+- **Benefits:** **high cohesion**, **low coupling**, easier navigation, team autonomy, independent testing & deployment, and simpler refactor to microservices.
+- **Rules of thumb:** use one module per feature, declare explicit imports for dependencies, and export only public APIs.
 
 </details>
 
@@ -4641,7 +4714,11 @@ export class UsersModule {}
 
 **Answer:**
 
-Create a new module when you have a **distinct business feature** or **domain**, **shared functionality** used by multiple modules, a **bounded context** in DDD, or **cross-cutting concerns** (auth, logging). Guidelines: module should have **single responsibility**, **5-10+ related files**, **clear boundaries**, and **potential for reuse** or **independent deployment**. Don't create modules prematurely - start simple, refactor when needed.
+When to create a new module
+
+- **Create a module when:** you have a distinct business feature/domain (e.g., users, orders), shared functionality used by multiple modules, a DDD bounded context, or a cross-cutting concern (auth, logging).
+- **Guidelines:** prefer single responsibility, ~5–10+ related files, clear boundaries, and measurable potential for reuse or independent deployment.
+- **Avoid premature modularization:** start simple and refactor into modules when features grow; don’t create modules for tiny utilities or unclear responsibilities.
 
 ---
 
@@ -5111,7 +5188,11 @@ export class MiscModule {}
 // UserModule and OrdersModule share internal state
 ```
 
-**Key Takeaway:** Create a new module when you have: **distinct business feature** (users, orders, products), **shared functionality** used by 3+ modules (logger, email, cache), **cross-cutting concern** (authentication, authorization), **bounded context** in DDD, or when module grows beyond **15-20 files** (split into sub-modules). **Don't create module** for: single utility function, 1-2 simple files, or unclear responsibility. Guidelines: module should have **single responsibility**, **clear boundaries**, **5-10+ related files**, **potential for reuse**, and **independent testing**. Start simple, refactor when needed - avoid premature modularization.
+**Key Takeaway:** When to create a module
+
+- **When:** distinct business feature/domain (users, orders, products), shared functionality used by 3+ modules (logger, email, cache), cross-cutting concern (auth, logging), DDD bounded context, or a module growing beyond ~15–20 files (split into sub-modules).
+- **When NOT to:** single utility functions, 1–2 trivial files, or unclear responsibilities (avoid premature modularization).
+- **Guidelines:** aim for single responsibility, clear boundaries, ~5–10+ related files, potential for reuse, and independent testability.
 
 </details>
 
@@ -5120,7 +5201,11 @@ export class MiscModule {}
 
 **Answer:**
 
-**Feature modules** organize code by **business domains** (users, orders, products) - they encapsulate specific features with their own controllers, services, and entities. **Shared modules** contain **cross-cutting concerns** and **utilities** used by multiple features (logger, email, database, cache). Feature modules focus on **vertical slicing** (complete feature), while shared modules provide **horizontal services** (used everywhere).
+Feature vs. shared modules
+
+- **Feature modules:** organize code by business domain (users, orders, products). They encapsulate feature-specific controllers, services, repositories, and entities (vertical slicing).
+- **Shared modules:** provide cross-cutting concerns and utilities used across features (logger, email, database, cache). They offer horizontal services consumed by feature modules.
+- **Quick rule:** Feature = vertical feature slice; Shared = horizontal utilities and infrastructure.
 
 ---
 
@@ -5656,7 +5741,11 @@ export class SharedModule {}
 export class UsersModule {}  // Don't make features global!
 ```
 
-**Key Takeaway:** **Feature modules** organize business domains (users, orders, products) with controllers, services, repositories, and entities - they implement **vertical slices** of functionality. **Shared modules** provide **cross-cutting concerns** and **utilities** (logger, email, cache, date helpers) used by multiple features - they implement **horizontal services**. Feature modules **import** shared modules to use utilities, **export** services if other features need them, and focus on **single domain**. Shared modules **export all providers**, have **no controllers/entities**, contain **no business logic**, and often use **@Global()** decorator. Use feature modules for business logic, shared modules for infrastructure and utilities.
+**Key Takeaway:**
+
+- **Feature modules (vertical):** One module per business domain (e.g., `UserModule`, `OrderModule`) containing controllers, services, repositories, entities — focused on a single domain.
+- **Shared modules (horizontal):** Provide cross-cutting utilities (logger, email, cache, date helpers); typically export providers, contain no controllers/entities, and are often `@Global()` for convenience.
+- **How they interact:** Feature modules **import** shared modules to reuse utilities and **export** services only when other features need them; keep feature logic inside feature modules and infrastructure/utilities in shared/core modules.
 
 </details>
 
@@ -5665,7 +5754,12 @@ export class UsersModule {}  // Don't make features global!
 
 **Answer:**
 
-**Dependency Injection (DI)** is a design pattern where objects receive their dependencies from external sources rather than creating them internally. In NestJS, the **IoC (Inversion of Control) container** manages dependencies: you declare what you need (via constructor), and NestJS provides instances automatically. Benefits: **loose coupling**, **easy testing** (mock dependencies), **better maintainability**, and **flexibility** (swap implementations).
+**Dependency Injection (DI)** is a design pattern where objects receive their dependencies from external sources rather than creating them internally.
+
+- **How it works in NestJS:** The **IoC (Inversion of Control) container** reads constructor params and provides instances automatically (constructor injection).
+- **Why use DI:** Promotes **loose coupling**, **easy testing** (inject mocks), **better maintainability**, and **flexibility** (swap implementations or provide test doubles).
+
+- **Best practice:** Prefer constructor injection with `@Injectable()` and depend on abstractions (interfaces/tokens) when possible.
 
 ---
 
@@ -6204,7 +6298,11 @@ constructor(@Optional() private cache?: CacheService) {}
 constructor(private cache: CacheService) {}  // Fails if not registered
 ```
 
-**Key Takeaway:** **Dependency Injection** is a pattern where objects receive dependencies from external sources (NestJS IoC container) rather than creating them. Use **constructor injection** with `@Injectable()` decorator: declare dependencies in constructor, NestJS provides instances automatically. Benefits: **loose coupling** (classes don't create dependencies), **easy testing** (inject mocks), **flexibility** (swap implementations via providers), **maintainability** (explicit dependencies), and **lifecycle management** (singleton by default). Use **interface-based DI** (`@Inject('TOKEN')`) for abstraction, **factory providers** for complex creation, and **custom tokens** for multiple implementations. DI is fundamental to NestJS architecture and enables SOLID principles.
+**Key Takeaway:**
+
+- **What:** **Dependency Injection (DI)** lets classes receive dependencies from the NestJS IoC container instead of constructing them.
+- **How (best practice):** Prefer **constructor injection** with `@Injectable()` and depend on abstractions when useful (e.g., `@Inject('TOKEN')`, interface-based DI, factory providers).
+- **Why:** Enables **loose coupling**, **easy testing** (inject mocks), **flexibility** (swap implementations), **maintainability** (explicit dependencies), and automatic **lifecycle management** (singletons by default). DI underpins SOLID design in NestJS.
 
 </details>
 
@@ -6213,7 +6311,11 @@ constructor(private cache: CacheService) {}  // Fails if not registered
 
 **Answer:**
 
-**Repository Pattern** abstracts **data access logic** from business logic by providing a collection-like interface for accessing domain entities. Repository sits between **Service layer** (business logic) and **Database** (persistence), encapsulating queries, database operations, and data mapping. Use when: you need **database abstraction**, want to **swap implementations** (TypeORM → Prisma), need **testability** (mock repository), or have **complex queries** centralized in one place.
+**Repository Pattern:**
+
+- **What:** Abstracts data-access from business logic via a repository class (collection-like API) that handles queries, mapping, and persistence.
+- **Where it lives:** Sits between the **Service layer** and the **Database** — services call repository methods instead of raw ORM queries.
+- **When to use:** When you need **database abstraction**, want to **swap implementations** (TypeORM → Prisma), require **testability** (mock repository), or need to centralize **complex queries/transactions**.
 
 ---
 
@@ -6935,7 +7037,11 @@ async findById(id: string): Promise<User>
 async findById(id: string): Promise<any>
 ```
 
-**Key Takeaway:** **Repository Pattern** abstracts data access by providing a **collection-like interface** for domain entities, sitting between service layer and database. Benefits: **database abstraction** (swap TypeORM for Prisma), **testability** (mock repository in tests), **separation of concerns** (queries in repository, business logic in service), **reusable queries**, and **centralized data access**. Implement with `@Injectable()` class containing CRUD operations, use **interface-based** approach for flexibility, extend **BaseRepository** for common methods, and handle **complex queries** and **transactions** in repository. Use when: app has complex queries, needs testability, wants ORM flexibility, or follows DDD. Don't use for simple prototypes or single-entity CRUD apps.
+**Key Takeaway:**
+
+- **What & where:** Repository Pattern provides a **collection-like interface** for domain entities and sits between the service layer and the database.
+- **Benefits:** Enables **database abstraction** (swap TypeORM → Prisma), **testability** (mock repositories), **separation of concerns**, **reusable queries**, and centralized data access for complex queries/transactions.
+- **Implementation & when to use:** Implement as an `@Injectable()` repository class (or extend a `BaseRepository`), prefer interface-based providers for flexibility, and use repositories for complex, testable, or multi-ORM apps — avoid for trivial single-entity CRUD prototypes.
 
 </details>
 
